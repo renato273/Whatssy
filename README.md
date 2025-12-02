@@ -25,12 +25,12 @@ API REST para interactuar con WhatsApp utilizando **Baileys** y **Express**. Per
 
 1. Clona este repositorio:
    ```bash
-   git clone https://github.com/ramiroec/whatsapp-web-api.git
+   git clone https://github.com/renato273/Whatssy.git
    ```
 
 2. Navega al directorio del proyecto:
    ```bash
-   cd whatsapp-web-api
+   cd whatssy
    ```
 
 3. Instala las dependencias:
@@ -256,7 +256,7 @@ Obtiene el último código QR disponible para vincular WhatsApp Web.
 ## 🗂️ Estructura del Proyecto
 
 ```
-whatsapp-web-api/
+whatssy/
 ├── app.js                    # Punto de entrada principal
 ├── package.json
 ├── .env                      # Variables de entorno (no incluido en git)
