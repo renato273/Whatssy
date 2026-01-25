@@ -76,6 +76,11 @@ async function connectToWhatsApp() {
                 const qrCode = await qrcode.toString(qr, { type: 'terminal', small: true });
                 console.log(qrCode);
                 console.log('\n⏳ Esperando escaneo del código QR...\n');
+                
+                // Emitir evento de QR disponible a través de Socket.io
+                if (io) {
+                    io.emit('qr_available', { qr: qr });
+                }
             }
 
             // Manejar estado de conexión

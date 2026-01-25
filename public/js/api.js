@@ -23,6 +23,19 @@ api.interceptors.request.use(
     }
 );
 
+// Interceptor de respuesta para manejar errores 404 silenciosamente en getQR
+api.interceptors.response.use(
+    (response) => response,
+    (error) => {
+        // Si es un 404 en la ruta /whatsapp/qr, no es un error real (es normal cuando está conectado)
+        if (error.config?.url?.includes('/whatsapp/qr') && error.response?.status === 404) {
+            // Retornar una respuesta con qr: null en lugar de lanzar error
+            return Promise.resolve({ data: { qr: null } });
+        }
+        return Promise.reject(error);
+    }
+);
+
 // Servicios de API
 const apiService = {
     // Autenticación
@@ -155,7 +168,16 @@ const apiService = {
     },
 
     async getQR() {
-        const response = await api.get('/whatsapp/qr');
+        const response = await api.get('/whatsapp/qr', {
+            validateStatus: function (status) {
+                // No lanzar error para 404 (es normal cuando está conectado)
+                return status < 500;
+            }
+        });
+        // Si es 404, devolver null
+        if (response.status === 404) {
+            return { qr: null };
+        }
         return response.data;
     },
 };

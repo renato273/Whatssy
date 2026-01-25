@@ -142,7 +142,33 @@ const Dashboard = {
                     <button @click="toggleDarkMode" class="btn btn-outline-light btn-sm theme-toggle" :title="darkMode ? 'Modo claro' : 'Modo oscuro'">
                         {{ darkMode ? '☀️' : '🌙' }}
                     </button>
-                    <button @click="logout" class="btn btn-outline-light btn-sm">Cerrar Sesión</button>
+                    <div class="user-menu-dropdown">
+                        <button
+                            type="button"
+                            class="btn btn-outline-light btn-sm user-menu-toggle"
+                            @click="showUserMenu = !showUserMenu"
+                        >
+                            {{ user?.nombre || 'Usuario' }} ▾
+                        </button>
+                        <div v-if="showUserMenu" class="user-menu">
+                            <button
+                                type="button"
+                                class="user-menu-item"
+                                @click="openQRModal"
+                            >
+                                <span class="menu-icon">📱</span>
+                                <span>Ver código QR</span>
+                            </button>
+                            <button
+                                type="button"
+                                class="user-menu-item"
+                                @click="logout"
+                            >
+                                <span class="menu-icon">🚪</span>
+                                <span>Cerrar Sesión</span>
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </header>
             
@@ -389,6 +415,51 @@ const Dashboard = {
                     </form>
                 </div>
             </div>
+
+            <!-- Modal QR WhatsApp -->
+            <div v-if="showQRModal" class="modal-overlay" @click="closeQRModal">
+                <div class="modal qr-modal" @click.stop>
+                    <div class="modal-header">
+                        <h3>Conexión WhatsApp</h3>
+                        <button type="button" class="modal-close" @click="closeQRModal">&times;</button>
+                    </div>
+                    <div class="qr-container">
+                        <!-- Estado: Conectado -->
+                        <div v-if="isWhatsAppConnected" class="qr-status-connected">
+                            <div class="qr-status-icon">✅</div>
+                            <h4>WhatsApp conectado</h4>
+                            <p class="qr-status-note">Tu sesión de WhatsApp está activa y funcionando correctamente.</p>
+                        </div>
+                        <!-- Estado: Cargando QR -->
+                        <div v-else-if="qrLoading" class="qr-status-loading">
+                            <div class="qr-status-icon spinner">⏳</div>
+                            <p>Generando código QR...</p>
+                        </div>
+                        <!-- Estado: QR disponible -->
+                        <div v-else-if="qrCode" class="qr-code-content">
+                            <div class="qr-instructions">
+                                <strong>Para conectar WhatsApp:</strong>
+                                <ol>
+                                    <li>Abre WhatsApp en tu teléfono</li>
+                                    <li>Ve a <strong>Configuración → Dispositivos vinculados</strong></li>
+                                    <li>Toca <strong>Vincular un dispositivo</strong></li>
+                                    <li>Escanea este código QR</li>
+                                </ol>
+                            </div>
+                            <div class="qr-code-wrapper">
+                                <canvas ref="qrCanvas"></canvas>
+                            </div>
+                            <p class="qr-note">El código se actualiza automáticamente cada 20 segundos</p>
+                        </div>
+                        <!-- Estado: Sin QR (esperando generación) -->
+                        <div v-else class="qr-status-loading">
+                            <div class="qr-status-icon">📱</div>
+                            <p>Esperando código QR del servidor...</p>
+                            <button type="button" class="btn btn-primary btn-sm" @click="refreshQR">Reintentar</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     `,
     data() {
@@ -424,6 +495,11 @@ const Dashboard = {
             darkMode: localStorage.getItem('darkMode') === 'true',
             toasts: [],
             toastIdCounter: 0,
+            showQRModal: false,
+            qrCode: null,
+            qrLoading: false,
+            qrRefreshInterval: null,
+            showUserMenu: false,
         };
     },
     computed: {
@@ -486,12 +562,30 @@ const Dashboard = {
             const wasConnected = this.isWhatsAppConnected;
             this.isWhatsAppConnected = status.connected;
             
+            // Si se desconectó, intentar cargar el QR
+            if (!status.connected && wasConnected && this.showQRModal) {
+                this.loadQR();
+            }
+            
             // Solo mostrar notificación si cambió el estado
             if (wasConnected !== status.connected) {
                 if (status.connected) {
                     this.showToast('WhatsApp conectado', 'success', '✅');
+                    this.qrCode = null; // Limpiar QR cuando se conecta
                 } else {
                     this.showToast('WhatsApp desconectado', 'warning', '⚠️');
+                }
+            }
+        });
+        
+        // Escuchar cuando hay un nuevo QR disponible
+        this.socket.on('qr_available', async (data) => {
+            if (data.qr) {
+                this.qrCode = data.qr;
+                if (this.showQRModal) {
+                    this.$nextTick(async () => {
+                        await this.renderQR();
+                    });
                 }
             }
         });
@@ -577,9 +671,6 @@ const Dashboard = {
             // Recargar contactos para actualizar contador de no leídos
             this.loadContactos();
 
-            // Siempre refrescar contactos para actualizar contadores de no leídos
-            this.loadContactos();
-
             // Mostrar toast y notificación del navegador para mensajes recibidos
             if (message.type === 'received') {
                 // Buscar el contacto para obtener su nombre
@@ -615,6 +706,20 @@ const Dashboard = {
             this.$forceUpdate(); // Forzar actualización de Vue para recalcular isMobile()
         };
         window.addEventListener('resize', this.resizeHandler);
+        
+        // Cerrar menús al hacer clic fuera
+        this.clickOutsideHandler = (event) => {
+            if (this.showUserMenu && !event.target.closest('.user-menu-dropdown')) {
+                this.showUserMenu = false;
+            }
+            if (this.showStatusDropdown && !event.target.closest('.user-status-dropdown')) {
+                this.showStatusDropdown = false;
+            }
+            if (this.showMainMenu && !event.target.closest('.nav-dropdown')) {
+                this.showMainMenu = false;
+            }
+        };
+        document.addEventListener('click', this.clickOutsideHandler);
 
         // Inicializar permisos de notificación
         this.initNotifications();
@@ -623,12 +728,19 @@ const Dashboard = {
         if (this.refreshInterval) {
             clearInterval(this.refreshInterval);
         }
+        if (this.qrRefreshInterval) {
+            clearInterval(this.qrRefreshInterval);
+        }
         if (this.socket) {
             this.socket.disconnect();
         }
         // Remover listener de resize
         if (this.resizeHandler) {
             window.removeEventListener('resize', this.resizeHandler);
+        }
+        // Remover listener de clics fuera
+        if (this.clickOutsideHandler) {
+            document.removeEventListener('click', this.clickOutsideHandler);
         }
     },
     methods: {
@@ -833,6 +945,92 @@ const Dashboard = {
                 return messageDate.toLocaleDateString('es-ES', options);
             }
         },
+        // Métodos para modal QR
+        async openQRModal() {
+            this.showUserMenu = false; // Cerrar menú al abrir modal
+            this.showQRModal = true;
+            this.qrCode = null;
+            
+            // Si ya está conectado, no necesitamos cargar QR
+            if (this.isWhatsAppConnected) {
+                return;
+            }
+            
+            await this.loadQR();
+            
+            // Renderizar QR después de que el modal se haya mostrado
+            this.$nextTick(async () => {
+                if (this.qrCode) {
+                    await this.renderQR();
+                }
+            });
+            
+            // Iniciar actualización periódica del QR cada 20 segundos si no está conectado
+            if (!this.isWhatsAppConnected) {
+                this.qrRefreshInterval = setInterval(async () => {
+                    if (this.showQRModal && !this.isWhatsAppConnected) {
+                        await this.loadQR();
+                        this.$nextTick(async () => {
+                            if (this.qrCode) {
+                                await this.renderQR();
+                            }
+                        });
+                    }
+                }, 20000);
+            }
+        },
+        closeQRModal() {
+            this.showQRModal = false;
+            this.qrLoading = false;
+            if (this.qrRefreshInterval) {
+                clearInterval(this.qrRefreshInterval);
+                this.qrRefreshInterval = null;
+            }
+        },
+        async loadQR() {
+            this.qrLoading = true;
+            try {
+                const response = await apiService.getQR();
+                if (response && response.qr) {
+                    this.qrCode = response.qr;
+                } else {
+                    this.qrCode = null;
+                }
+            } catch (error) {
+                // Solo loggear errores inesperados
+                if (error.response?.status && error.response.status !== 404) {
+                    console.error('Error al cargar QR:', error);
+                }
+                this.qrCode = null;
+            } finally {
+                this.qrLoading = false;
+            }
+        },
+        async refreshQR() {
+            this.qrCode = null;
+            await this.loadQR();
+            this.$nextTick(async () => {
+                if (this.qrCode) {
+                    await this.renderQR();
+                }
+            });
+        },
+        async renderQR() {
+            if (!this.qrCode || !this.$refs.qrCanvas) return;
+            
+            try {
+                await QRCode.toCanvas(this.$refs.qrCanvas, this.qrCode, {
+                    width: 300,
+                    margin: 2,
+                    color: {
+                        dark: '#000000',
+                        light: '#FFFFFF'
+                    }
+                });
+            } catch (error) {
+                console.error('Error al renderizar QR:', error);
+            }
+        },
         async loadContactTags() {
             if (!this.selectedContacto) {
                 this.contactTags = [];
@@ -927,6 +1125,7 @@ const Dashboard = {
             window.open(mediaPath, '_blank');
         },
         logout() {
+            this.showUserMenu = false; // Cerrar menú antes de cerrar sesión
             localStorage.removeItem('user');
             localStorage.removeItem('apiKey');
             this.$router.push('/login');
