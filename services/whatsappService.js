@@ -112,14 +112,30 @@ async function connectToWhatsApp() {
                     reconnectAttempts++;
                     console.log(`🔄 Intento de reconexión ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS}...\n`);
                     isReady = false;
+                    
+                    // Emitir estado de conexión
+                    if (io) {
+                        io.emit('whatsapp_status', { connected: false });
+                    }
+                    
                     setTimeout(() => connectToWhatsApp(), 3000);
                 } else if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
                     console.log('❌ Se alcanzó el límite de intentos de reconexión.');
                     console.log('   Por favor, reinicia el servidor manualmente.\n');
                     isReady = false;
+                    
+                    // Emitir estado de conexión
+                    if (io) {
+                        io.emit('whatsapp_status', { connected: false });
+                    }
                 } else {
                     console.log('❌ No se puede reconectar. Por favor, reinicia el servidor.\n');
                     isReady = false;
+                    
+                    // Emitir estado de conexión
+                    if (io) {
+                        io.emit('whatsapp_status', { connected: false });
+                    }
                 }
             } else if (connection === 'open') {
                 reconnectAttempts = 0;
@@ -132,8 +148,19 @@ async function connectToWhatsApp() {
                     console.log(`✅ Conectado como: ${socket.user.name || 'Usuario'}`);
                 }
                 console.log('========================================\n');
+                
+                // Emitir estado de conexión
+                if (io) {
+                    io.emit('whatsapp_status', { connected: true });
+                }
             } else if (connection === 'connecting') {
                 console.log('🔄 Conectando a WhatsApp...\n');
+                isReady = false;
+                
+                // Emitir estado de conexión
+                if (io) {
+                    io.emit('whatsapp_status', { connected: false });
+                }
             }
         });
 

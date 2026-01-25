@@ -139,9 +139,27 @@ const Dashboard = {
                             </button>
                         </div>
                     </div>
+                    <button @click="toggleDarkMode" class="btn btn-outline-light btn-sm theme-toggle" :title="darkMode ? 'Modo claro' : 'Modo oscuro'">
+                        {{ darkMode ? '☀️' : '🌙' }}
+                    </button>
                     <button @click="logout" class="btn btn-outline-light btn-sm">Cerrar Sesión</button>
                 </div>
             </header>
+            
+            <!-- Sistema de notificaciones toast -->
+            <div class="toast-container">
+                <div
+                    v-for="toast in toasts"
+                    :key="toast.id"
+                    :class="'toast toast-' + toast.type"
+                >
+                    <div class="toast-content">
+                        <span class="toast-icon">{{ toast.icon }}</span>
+                        <span class="toast-message">{{ toast.message }}</span>
+                    </div>
+                    <button @click="removeToast(toast.id)" class="toast-close">×</button>
+                </div>
+            </div>
             
             <div class="dashboard-content">
                 <!-- Columna izquierda: Lista de contactos -->
@@ -150,9 +168,17 @@ const Dashboard = {
                         <h2>Contactos</h2>
                         <button @click="showAddContact = true" class="btn btn-success btn-sm">+ Nuevo</button>
                     </div>
+                    <div class="contacts-search">
+                        <input
+                            v-model="searchQuery"
+                            type="text"
+                            placeholder="Buscar contacto..."
+                            class="search-input"
+                        />
+                    </div>
                     <div class="contacts-list">
                         <div
-                            v-for="contacto in contactos"
+                            v-for="contacto in filteredContactos"
                             :key="contacto.id"
                             @click="selectContacto(contacto)"
                             :class="['contact-item', { active: selectedContacto?.id === contacto.id }]"
@@ -171,7 +197,10 @@ const Dashboard = {
                                 </div>
                             </div>
                         </div>
-                        <div v-if="contactos.length === 0" class="empty-state">
+                        <div v-if="filteredContactos.length === 0 && contactos.length > 0" class="empty-state">
+                            No se encontraron contactos con "{{ searchQuery }}"
+                        </div>
+                        <div v-else-if="contactos.length === 0" class="empty-state">
                             No hay contactos. Agrega uno nuevo.
                         </div>
                     </div>
@@ -214,11 +243,15 @@ const Dashboard = {
                         </div>
                         
                         <div class="chat-messages" ref="messagesContainer">
-                            <div
-                                v-for="message in messages"
-                                :key="message.id"
-                                :class="['message', message.type]"
-                            >
+                            <template v-for="(group, dateKey) in groupedMessages" :key="dateKey">
+                                <div class="message-date-divider">
+                                    <span class="date-label">{{ formatDateLabel(dateKey) }}</span>
+                                </div>
+                                <div
+                                    v-for="message in group"
+                                    :key="message.id"
+                                    :class="['message', message.type]"
+                                >
                                 <div class="message-content">
                                     <!-- Mensaje multimedia: Imagen -->
                                     <div v-if="message.mediaInfo && message.mediaInfo.type === 'image' && message.mediaInfo.path" class="message-media">
@@ -277,7 +310,8 @@ const Dashboard = {
                                         </div>
                                     </div>
                                 </div>
-                            </div>
+                                </div>
+                            </template>
                             <div v-if="messages.length === 0" class="empty-state">
                                 No hay mensajes aún. Envía el primero.
                             </div>
@@ -385,6 +419,11 @@ const Dashboard = {
             tagSelection: [],
             baseTitle: document.title || 'Whatssy',
             showMainMenu: false,
+            searchQuery: '',
+            isWhatsAppConnected: false,
+            darkMode: localStorage.getItem('darkMode') === 'true',
+            toasts: [],
+            toastIdCounter: 0,
         };
     },
     computed: {
@@ -401,8 +440,33 @@ const Dashboard = {
         currentStatusColor() {
             return this.currentStatus?.color || '#6b7280';
         },
+        filteredContactos() {
+            if (!this.searchQuery.trim()) {
+                return this.contactos;
+            }
+            const query = this.searchQuery.toLowerCase();
+            return this.contactos.filter(contacto => 
+                contacto.nombre_contacto.toLowerCase().includes(query) ||
+                contacto.numero.toLowerCase().includes(query)
+            );
+        },
+        groupedMessages() {
+            const groups = {};
+            this.messages.forEach(message => {
+                const date = new Date(message.timestamp || message.created_at);
+                const dateKey = date.toDateString();
+                if (!groups[dateKey]) {
+                    groups[dateKey] = [];
+                }
+                groups[dateKey].push(message);
+            });
+            return groups;
+        },
     },
     async mounted() {
+        // Aplicar modo oscuro si está activado
+        this.applyDarkMode();
+        
         // Cargar usuario desde localStorage
         const userStr = localStorage.getItem('user');
         if (userStr) {
@@ -417,6 +481,29 @@ const Dashboard = {
         // Conectar a Socket.io para mensajes en tiempo real
         this.socket = io('http://localhost:3000');
         
+        // Escuchar estado de conexión de WhatsApp
+        this.socket.on('whatsapp_status', (status) => {
+            const wasConnected = this.isWhatsAppConnected;
+            this.isWhatsAppConnected = status.connected;
+            
+            // Solo mostrar notificación si cambió el estado
+            if (wasConnected !== status.connected) {
+                if (status.connected) {
+                    this.showToast('WhatsApp conectado', 'success', '✅');
+                } else {
+                    this.showToast('WhatsApp desconectado', 'warning', '⚠️');
+                }
+            }
+        });
+        
+        // Verificar estado inicial
+        this.checkWhatsAppStatus();
+        
+        // Verificar estado periódicamente cada 10 segundos
+        setInterval(() => {
+            this.checkWhatsAppStatus();
+        }, 10000);
+        
         // Escuchar actualizaciones de estado de mensajes
         this.socket.on('message_status_update', (update) => {
             // Actualizar el estado de entrega de un mensaje enviado
@@ -429,10 +516,18 @@ const Dashboard = {
 
         // Escuchar nuevos mensajes
         this.socket.on('new_message', (message) => {
-            // Solo agregar el mensaje si corresponde al contacto seleccionado
+            // Normalizar número del mensaje
+            const messageNumero = message.numero || message.numeroCompleto?.replace('@s.whatsapp.net', '').replace('@c.us', '') || '';
+            
+            // Buscar el contacto correspondiente
+            const contacto = this.contactos.find(c => {
+                const num = c.numero.replace('@s.whatsapp.net', '').replace('@c.us', '');
+                return num === messageNumero;
+            });
+            
+            // Si el contacto está seleccionado, agregar el mensaje al chat
             if (this.selectedContacto) {
                 const numeroNormalizado = this.selectedContacto.numero.replace('@s.whatsapp.net', '').replace('@c.us', '');
-                const messageNumero = message.numero || message.numeroCompleto?.replace('@s.whatsapp.net', '').replace('@c.us', '');
                 
                 if (numeroNormalizado === messageNumero) {
                     // Verificar si el mensaje ya existe (evitar duplicados)
@@ -469,12 +564,41 @@ const Dashboard = {
                     }
                 }
             }
+            
+            // Mostrar notificación toast si el contacto NO está seleccionado o si no hay contacto seleccionado
+            if (!this.selectedContacto || (this.selectedContacto && this.selectedContacto.numero.replace('@s.whatsapp.net', '').replace('@c.us', '') !== messageNumero)) {
+                const contactoNombre = contacto?.nombre_contacto || messageNumero || 'Desconocido';
+                const mensajePreview = message.body || '[Mensaje multimedia]';
+                const preview = mensajePreview.length > 50 ? mensajePreview.substring(0, 50) + '...' : mensajePreview;
+                
+                this.showToast(`${contactoNombre}: ${preview}`, 'info', '💬');
+            }
+            
+            // Recargar contactos para actualizar contador de no leídos
+            this.loadContactos();
 
             // Siempre refrescar contactos para actualizar contadores de no leídos
             this.loadContactos();
 
-            // Notificación visual del navegador para mensajes recibidos
+            // Mostrar toast y notificación del navegador para mensajes recibidos
             if (message.type === 'received') {
+                // Buscar el contacto para obtener su nombre
+                const contacto = this.contactos.find(c => {
+                    const num = c.numero.replace('@s.whatsapp.net', '').replace('@c.us', '');
+                    const msgNum = message.numero || message.numeroCompleto?.replace('@s.whatsapp.net', '').replace('@c.us', '') || '';
+                    return num === msgNum;
+                });
+                
+                const contactoNombre = contacto?.nombre_contacto || message.numero || 'Desconocido';
+                const mensajePreview = message.body || '[Mensaje multimedia]';
+                const preview = mensajePreview.length > 50 ? mensajePreview.substring(0, 50) + '...' : mensajePreview;
+                
+                // Mostrar toast solo si el contacto no está seleccionado o si no hay contacto seleccionado
+                if (!this.selectedContacto || (this.selectedContacto && this.selectedContacto.numero.replace('@s.whatsapp.net', '').replace('@c.us', '') !== (message.numero || message.numeroCompleto?.replace('@s.whatsapp.net', '').replace('@c.us', '')))) {
+                    this.showToast(`${contactoNombre}: ${preview}`, 'info', '💬');
+                }
+                
+                // Notificación visual del navegador
                 this.showBrowserNotification(message);
             }
         });
@@ -629,6 +753,7 @@ const Dashboard = {
             try {
                 const numero = this.selectedContacto.numero.replace('@s.whatsapp.net', '').replace('@c.us', '');
                 await apiService.sendMessage(numero, mensaje, this.user.id);
+                this.showToast('Mensaje enviado', 'success', '✓');
                 
                 // El mensaje se agregará automáticamente vía Socket.io
                 // Solo recargamos si hay algún problema con Socket.io
@@ -638,10 +763,74 @@ const Dashboard = {
                     }
                 }, 1000);
             } catch (error) {
-                alert(error.response?.data?.error || 'Error al enviar el mensaje');
+                this.showToast(error.response?.data?.error || 'Error al enviar el mensaje', 'error', '✕');
                 this.newMessage = mensaje; // Restaurar el mensaje si falla
             } finally {
                 this.sending = false;
+            }
+        },
+        // Métodos para notificaciones toast
+        showToast(message, type = 'info', icon = 'ℹ️') {
+            const toast = {
+                id: ++this.toastIdCounter,
+                message,
+                type,
+                icon,
+            };
+            this.toasts.push(toast);
+            
+            // Auto-remover después de 3 segundos
+            setTimeout(() => {
+                this.removeToast(toast.id);
+            }, 3000);
+        },
+        removeToast(id) {
+            const index = this.toasts.findIndex(t => t.id === id);
+            if (index !== -1) {
+                this.toasts.splice(index, 1);
+            }
+        },
+        // Métodos para modo oscuro
+        toggleDarkMode() {
+            this.darkMode = !this.darkMode;
+            localStorage.setItem('darkMode', this.darkMode.toString());
+            this.applyDarkMode();
+        },
+        applyDarkMode() {
+            if (this.darkMode) {
+                document.body.classList.add('dark-mode');
+            } else {
+                document.body.classList.remove('dark-mode');
+            }
+        },
+        // Métodos para indicador de conexión
+        async checkWhatsAppStatus() {
+            try {
+                // Verificar estado del cliente de WhatsApp
+                const response = await fetch('http://localhost:3000/api/whatsapp/status');
+                if (response.ok) {
+                    const data = await response.json();
+                    this.isWhatsAppConnected = data.isReady || false;
+                }
+            } catch (error) {
+                console.error('Error al verificar estado de WhatsApp:', error);
+                this.isWhatsAppConnected = false;
+            }
+        },
+        // Método para formatear etiquetas de fecha
+        formatDateLabel(dateString) {
+            const today = new Date();
+            const yesterday = new Date(today);
+            yesterday.setDate(yesterday.getDate() - 1);
+            const messageDate = new Date(dateString);
+            
+            if (messageDate.toDateString() === today.toDateString()) {
+                return 'Hoy';
+            } else if (messageDate.toDateString() === yesterday.toDateString()) {
+                return 'Ayer';
+            } else {
+                const options = { day: 'numeric', month: 'long', year: messageDate.getFullYear() !== today.getFullYear() ? 'numeric' : undefined };
+                return messageDate.toLocaleDateString('es-ES', options);
             }
         },
         async loadContactTags() {
@@ -718,8 +907,9 @@ const Dashboard = {
                     user_id: this.user.id,
                 };
                 await this.loadContactos();
+                this.showToast('Contacto agregado exitosamente', 'success', '✓');
             } catch (error) {
-                alert(error.response?.data?.error || 'Error al crear contacto');
+                this.showToast(error.response?.data?.error || 'Error al crear contacto', 'error', '✕');
             }
         },
         formatTime(timestamp) {

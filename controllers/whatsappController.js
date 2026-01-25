@@ -462,11 +462,27 @@ function getQr(req, res) {
     res.json({ qr });
 }
 
+function getStatus(req, res) {
+    try {
+        const state = whatsappService.getClientState();
+        res.json({
+            isReady: state.isReady,
+            hasQr: state.hasQr,
+        });
+    } catch (error) {
+        console.error('Error al obtener estado:', error);
+        res.status(500).json({
+            error: 'Error al obtener estado del cliente',
+        });
+    }
+}
+
 module.exports = {
     sendMessage,
     getReceivedMessages,
     getQr,
     getMessageStatus,
     markMessagesAsRead,
+    getStatus,
 };
 
