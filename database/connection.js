@@ -360,9 +360,13 @@ function getMessagesByNumber(numero) {
             return reject(new Error('Base de datos no inicializada'));
         }
 
-        // Normalizar el número: quitar @s.whatsapp.net si existe
-        const numeroNormalizado = numero.replace('@s.whatsapp.net', '').replace('@c.us', '');
+        // Normalizar el número: quitar @s.whatsapp.net, @c.us, @lid si existe
+        const numeroNormalizado = numero
+            .replace('@s.whatsapp.net', '')
+            .replace('@c.us', '')
+            .replace('@lid', '');
         const numeroConSufijo = `${numeroNormalizado}@s.whatsapp.net`;
+        const numeroLid = `${numeroNormalizado}@lid`; // También buscar por LID
 
         // Consultar mensajes enviados (donde numero_destino es el número sin sufijo)
         // Incluir el último ACK para cada mensaje
@@ -388,7 +392,8 @@ function getMessagesByNumber(numero) {
         WHERE sm.numero_destino = ? OR sm.numero_destino = ?
         ORDER BY sm.created_at ASC`;
 
-        // Consultar mensajes recibidos (donde from_number puede tener @s.whatsapp.net)
+        // Consultar mensajes recibidos (donde from_number puede tener @s.whatsapp.net, @lid, etc.)
+        // También buscar en el payload JSON por remoteJidAlt y fromLid
         const receivedQuery = `SELECT 
             id,
             from_number as numero,
@@ -399,11 +404,23 @@ function getMessagesByNumber(numero) {
             is_read,
             'received' as type
         FROM received_messages 
-        WHERE from_number = ? OR from_number = ? OR from_number LIKE ?
+        WHERE from_number = ? 
+           OR from_number = ? 
+           OR from_number = ?
+           OR from_number LIKE ?
+           OR (payload LIKE ? OR payload LIKE ?)
         ORDER BY timestamp ASC`;
 
         const sentParams = [numeroNormalizado, numeroConSufijo];
-        const receivedParams = [numeroNormalizado, numeroConSufijo, `${numeroNormalizado}@%`];
+        // Buscar por número normalizado, con sufijo, LID, y también en el payload JSON
+        const receivedParams = [
+            numeroNormalizado,
+            numeroConSufijo,
+            numeroLid,
+            `${numeroNormalizado}@%`,
+            `%"from":"${numeroNormalizado}@%`, // Buscar en payload.from
+            `%"fromLid":"${numeroLid}%`, // Buscar en payload.fromLid
+        ];
 
         // Ejecutar ambas consultas
         db.all(sentQuery, sentParams, (err, sentMessages) => {
@@ -686,7 +703,10 @@ function getUserSupervisionSummary() {
                 JOIN received_messages r
                     ON (r.from_number = c.numero 
                         OR r.from_number = c.numero || '@s.whatsapp.net' 
-                        OR r.from_number LIKE c.numero || '@%')
+                        OR r.from_number = c.numero || '@lid'
+                        OR r.from_number LIKE c.numero || '@%'
+                        OR r.payload LIKE '%"from":"' || c.numero || '@%'
+                        OR r.payload LIKE '%"fromLid":"' || c.numero || '@lid%')
                    AND (r.is_read IS NULL OR r.is_read = 0)
                 GROUP BY c.user_id
             ) um ON um.user_id = u.id
@@ -895,8 +915,11 @@ function getContactoByNumero(numero) {
             return reject(new Error('Base de datos no inicializada'));
         }
 
-        // Normalizar el número para buscar
-        const numeroNormalizado = numero.replace('@s.whatsapp.net', '').replace('@c.us', '');
+        // Normalizar el número para buscar (incluyendo @lid)
+        const numeroNormalizado = numero
+            .replace('@s.whatsapp.net', '')
+            .replace('@c.us', '')
+            .replace('@lid', '');
 
         const sql = `SELECT 
             c.id, 
@@ -908,11 +931,12 @@ function getContactoByNumero(numero) {
             c.created_by, 
             c.updated_by
         FROM contactos c
-        WHERE c.numero = ? OR c.numero = ? OR c.numero LIKE ?`;
+        WHERE c.numero = ? OR c.numero = ? OR c.numero = ? OR c.numero LIKE ?`;
 
         const numeroConSufijo = `${numeroNormalizado}@s.whatsapp.net`;
+        const numeroLid = `${numeroNormalizado}@lid`;
 
-        db.get(sql, [numeroNormalizado, numeroConSufijo, `${numeroNormalizado}@%`], (err, row) => {
+        db.get(sql, [numeroNormalizado, numeroConSufijo, numeroLid, `${numeroNormalizado}@%`], (err, row) => {
             if (err) {
                 console.error('Error al obtener contacto por número:', err);
                 return reject(err);
@@ -946,7 +970,10 @@ function getAllContactos(userId = null) {
                 FROM received_messages r
                 WHERE (r.from_number = c.numero 
                     OR r.from_number = c.numero || '@s.whatsapp.net' 
-                    OR r.from_number LIKE c.numero || '@%')
+                    OR r.from_number = c.numero || '@lid'
+                    OR r.from_number LIKE c.numero || '@%'
+                    OR r.payload LIKE '%"from":"' || c.numero || '@%'
+                    OR r.payload LIKE '%"fromLid":"' || c.numero || '@lid%')
                   AND (r.is_read IS NULL OR r.is_read = 0)
             ) AS unread_count
         FROM contactos c
@@ -1042,14 +1069,31 @@ function markReceivedMessagesAsReadByNumber(numero) {
             return reject(new Error('Base de datos no inicializada'));
         }
 
-        const numeroNormalizado = numero.replace('@s.whatsapp.net', '').replace('@c.us', '');
+        // Normalizar el número: quitar @s.whatsapp.net, @c.us, @lid si existe
+        const numeroNormalizado = numero
+            .replace('@s.whatsapp.net', '')
+            .replace('@c.us', '')
+            .replace('@lid', '');
         const numeroConSufijo = `${numeroNormalizado}@s.whatsapp.net`;
+        const numeroLid = `${numeroNormalizado}@lid`;
 
         const sql = `UPDATE received_messages 
             SET is_read = 1 
-            WHERE (from_number = ? OR from_number = ? OR from_number LIKE ?)`;
+            WHERE (from_number = ? 
+                OR from_number = ? 
+                OR from_number = ?
+                OR from_number LIKE ?
+                OR payload LIKE ?
+                OR payload LIKE ?)`;
 
-        db.run(sql, [numeroNormalizado, numeroConSufijo, `${numeroNormalizado}@%`], function (err) {
+        db.run(sql, [
+            numeroNormalizado,
+            numeroConSufijo,
+            numeroLid,
+            `${numeroNormalizado}@%`,
+            `%"from":"${numeroNormalizado}@%`,
+            `%"fromLid":"${numeroLid}%`
+        ], function (err) {
             if (err) {
                 console.error('Error al marcar mensajes como leídos:', err);
                 return reject(err);
@@ -1066,6 +1110,7 @@ function getUnreadContactsByUser(userId) {
             return reject(new Error('Base de datos no inicializada'));
         }
 
+        // Actualizar consulta para manejar LIDs: buscar también en payload JSON
         const sql = `
             SELECT DISTINCT
                 c.id AS contacto_id,
@@ -1076,7 +1121,10 @@ function getUnreadContactsByUser(userId) {
                     FROM received_messages r
                     WHERE (r.from_number = c.numero
                            OR r.from_number = c.numero || '@s.whatsapp.net'
-                           OR r.from_number LIKE c.numero || '@%')
+                           OR r.from_number = c.numero || '@lid'
+                           OR r.from_number LIKE c.numero || '@%'
+                           OR r.payload LIKE '%"from":"' || c.numero || '@%'
+                           OR r.payload LIKE '%"fromLid":"' || c.numero || '@lid%')
                       AND (r.is_read IS NULL OR r.is_read = 0)
                 ) AS unread_count,
                 (
@@ -1084,7 +1132,10 @@ function getUnreadContactsByUser(userId) {
                     FROM received_messages r2
                     WHERE (r2.from_number = c.numero
                            OR r2.from_number = c.numero || '@s.whatsapp.net'
-                           OR r2.from_number LIKE c.numero || '@%')
+                           OR r2.from_number = c.numero || '@lid'
+                           OR r2.from_number LIKE c.numero || '@%'
+                           OR r2.payload LIKE '%"from":"' || c.numero || '@%'
+                           OR r2.payload LIKE '%"fromLid":"' || c.numero || '@lid%')
                       AND (r2.is_read IS NULL OR r2.is_read = 0)
                     ORDER BY 
                         COALESCE(r2.timestamp * 1000, strftime('%s', r2.created_at) * 1000) DESC,
@@ -1098,7 +1149,10 @@ function getUnreadContactsByUser(userId) {
                     FROM received_messages r
                     WHERE (r.from_number = c.numero
                            OR r.from_number = c.numero || '@s.whatsapp.net'
-                           OR r.from_number LIKE c.numero || '@%')
+                           OR r.from_number = c.numero || '@lid'
+                           OR r.from_number LIKE c.numero || '@%'
+                           OR r.payload LIKE '%"from":"' || c.numero || '@%'
+                           OR r.payload LIKE '%"fromLid":"' || c.numero || '@lid%')
                       AND (r.is_read IS NULL OR r.is_read = 0)
                   ) > 0
             ORDER BY c.nombre_contacto ASC

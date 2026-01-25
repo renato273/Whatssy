@@ -137,6 +137,46 @@ async function connectToWhatsApp() {
             }
         });
 
+        // Función helper para obtener el número de teléfono desde un JID (maneja LIDs)
+        function getPhoneNumberFromJid(remoteJid, remoteJidAlt = null, participant = null, participantAlt = null) {
+            // Si tenemos remoteJidAlt (número de teléfono alternativo), usarlo
+            if (remoteJidAlt && !remoteJidAlt.includes('@lid')) {
+                return remoteJidAlt;
+            }
+            
+            // Si remoteJid no es un LID, usarlo directamente
+            if (!remoteJid || !remoteJid.includes('@lid')) {
+                return remoteJid;
+            }
+            
+            // Si es un LID, intentar obtener el PN desde el mapeo interno
+            try {
+                if (socket && socket.signalRepository && socket.signalRepository.lidMapping) {
+                    const lidMapping = socket.signalRepository.lidMapping;
+                    const pn = lidMapping.getPNForLID(remoteJid);
+                    if (pn) {
+                        return pn;
+                    }
+                }
+            } catch (error) {
+                console.warn('Error al obtener PN desde LID mapping:', error);
+            }
+            
+            // Para grupos, intentar usar participantAlt si está disponible
+            if (participantAlt && !participantAlt.includes('@lid')) {
+                return participantAlt;
+            }
+            
+            // Si participant no es un LID, usarlo
+            if (participant && !participant.includes('@lid')) {
+                return participant;
+            }
+            
+            // Si todo falla, devolver el remoteJid original (será un LID)
+            // Esto es aceptable según la documentación: "MIGRATE TO LIDs. PNs are WAY LESS RELIABLE"
+            return remoteJid;
+        }
+
         // Manejar mensajes recibidos
         socket.ev.on('messages.upsert', async ({ messages, type }) => {
             if (type !== 'notify') return;
@@ -144,6 +184,14 @@ async function connectToWhatsApp() {
             for (const message of messages) {
                 // Ignorar mensajes de estado
                 if (message.key.remoteJid === 'status@broadcast') continue;
+
+                // Obtener el número de teléfono correcto (maneja LIDs)
+                const fromNumber = getPhoneNumberFromJid(
+                    message.key.remoteJid,
+                    message.key.remoteJidAlt,
+                    message.key.participant,
+                    message.key.participantAlt
+                );
 
                 // Detectar tipo de mensaje y extraer información
                 const messageType = Object.keys(message.message || {})[0];
@@ -243,7 +291,8 @@ async function connectToWhatsApp() {
 
                 const messageData = {
                     id: message.key.id,
-                    from: message.key.remoteJid,
+                    from: fromNumber, // Usar el número normalizado (no LID si es posible)
+                    fromLid: message.key.remoteJid, // Guardar también el LID original
                     body: messageBody,
                     timestamp: message.messageTimestamp,
                     messageType: messageType,
@@ -284,8 +333,11 @@ async function connectToWhatsApp() {
                 // Preparar el payload completo del mensaje
                 const payload = {
                     id: message.key.id,
-                    from: message.key.remoteJid,
-                    participant: message.key.participant,
+                    from: fromNumber, // Número normalizado (PN si está disponible)
+                    fromLid: message.key.remoteJid, // LID original
+                    remoteJidAlt: message.key.remoteJidAlt, // Número alternativo (PN)
+                    participant: message.key.participant, // Participant original
+                    participantAlt: message.key.participantAlt, // Participant alternativo (PN)
                     body: messageBody,
                     timestamp: message.messageTimestamp,
                     messageType: messageType,
@@ -293,27 +345,32 @@ async function connectToWhatsApp() {
                     mediaInfo: mediaInfo,
                 };
 
-                // Guardar el mensaje en la base de datos
+                // Guardar el mensaje en la base de datos usando el número normalizado
                 try {
                     await saveReceivedMessage({
                         messageId: message.key.id,
-                        fromNumber: message.key.remoteJid,
+                        fromNumber: fromNumber, // Usar el número normalizado (no LID)
                         messageBody: messageBody,
                         timestamp: message.messageTimestamp,
                         payload: payload,
                         mediaInfo: mediaInfo,
                     });
-                    console.log('Mensaje recibido guardado en la base de datos');
+                    console.log(`Mensaje recibido guardado en la base de datos desde: ${fromNumber}`);
 
                     // Emitir evento de nuevo mensaje recibido a través de Socket.io
                     if (io) {
-                        // Normalizar el número para el frontend (sin @s.whatsapp.net)
-                        const numeroNormalizado = message.key.remoteJid.replace('@s.whatsapp.net', '').replace('@c.us', '').replace('@g.us', '');
+                        // Normalizar el número para el frontend (sin sufijos)
+                        const numeroNormalizado = fromNumber
+                            .replace('@s.whatsapp.net', '')
+                            .replace('@c.us', '')
+                            .replace('@g.us', '')
+                            .replace('@lid', ''); // También remover @lid si queda
                         
                         io.emit('new_message', {
                             id: message.key.id,
                             numero: numeroNormalizado,
-                            numeroCompleto: message.key.remoteJid,
+                            numeroCompleto: fromNumber,
+                            numeroLid: message.key.remoteJid, // Incluir LID para referencia
                             body: messageBody,
                             timestamp: message.messageTimestamp * 1000, // Convertir a milisegundos
                             type: 'received',
@@ -339,8 +396,16 @@ async function connectToWhatsApp() {
                 if (update.update && update.update.status !== undefined) {
                     const { key, update: { status } } = update;
                     
+                    // Obtener el número normalizado para el ACK (maneja LIDs)
+                    const ackFromNumber = getPhoneNumberFromJid(
+                        key.remoteJid,
+                        key.remoteJidAlt,
+                        key.participant,
+                        key.participantAlt
+                    );
+                    
                     // Log detallado para debugging
-                    console.log(`🔍 ACK recibido - MessageId: ${key.id}, Status: ${status}, RemoteJid: ${key.remoteJid}, FromMe: ${key.fromMe}`);
+                    console.log(`🔍 ACK recibido - MessageId: ${key.id}, Status: ${status}, RemoteJid: ${key.remoteJid}, FromNumber: ${ackFromNumber}, FromMe: ${key.fromMe}`);
                     
                     // Validar que el status esté en el rango válido (0-4)
                     // Según observación del usuario:
@@ -358,7 +423,7 @@ async function connectToWhatsApp() {
                         const ackResult = await saveMessageAck({
                             messageId: key.id,
                             ackStatus: status,
-                            fromNumber: key.remoteJid,
+                            fromNumber: ackFromNumber, // Usar el número normalizado
                             timestamp: Math.floor(Date.now() / 1000), // Timestamp en segundos
                         });
                         
