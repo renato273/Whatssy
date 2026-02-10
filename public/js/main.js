@@ -75,53 +75,47 @@ const Dashboard = {
     template: `
         <div class="dashboard">
             <header class="dashboard-header">
-                <h1>Whatssy</h1>
-                <nav class="dashboard-nav">
-                    <router-link to="/dashboard" class="nav-link" active-class="active">Chat</router-link>
-                    <div v-if="isAdmin" class="nav-dropdown">
-                        <button
-                            type="button"
-                            class="nav-dropdown-toggle"
-                            @click="showMainMenu = !showMainMenu"
-                        >
-                            Panel admin ▾
-                        </button>
-                        <div v-if="showMainMenu" class="nav-dropdown-menu">
-                            <router-link
-                                to="/mis-contactos"
-                                class="nav-dropdown-item"
-                                @click.native="showMainMenu = false"
+                <div class="header-left">
+                    <h1 class="header-logo">W<span class="logo-text">hatssy</span></h1>
+                    <nav class="dashboard-nav">
+                        <router-link to="/dashboard" class="nav-link" active-class="active">
+                            <span class="nav-icon">💬</span>
+                            <span class="nav-label">Chat</span>
+                        </router-link>
+                        <div v-if="isAdmin" class="nav-dropdown">
+                            <button
+                                type="button"
+                                class="nav-dropdown-toggle"
+                                @click="showMainMenu = !showMainMenu"
                             >
-                                Mis contactos
-                            </router-link>
-                            <router-link
-                                to="/estados-usuario"
-                                class="nav-dropdown-item"
-                                @click.native="showMainMenu = false"
-                            >
-                                Estados usuario
-                            </router-link>
-                            <router-link
-                                to="/etiquetas"
-                                class="nav-dropdown-item"
-                                @click.native="showMainMenu = false"
-                            >
-                                Etiquetas
-                            </router-link>
-                            <router-link
-                                to="/supervision"
-                                class="nav-dropdown-item"
-                                @click.native="showMainMenu = false"
-                            >
-                                Supervisión
-                            </router-link>
+                                <span class="nav-icon">⚙️</span>
+                                <span class="nav-label">Admin</span>
+                                <span class="nav-caret">▾</span>
+                            </button>
+                            <div v-if="showMainMenu" class="nav-dropdown-menu">
+                                <router-link to="/mis-contactos" class="nav-dropdown-item" @click.native="showMainMenu = false">
+                                    Mis contactos
+                                </router-link>
+                                <router-link to="/estados-usuario" class="nav-dropdown-item" @click.native="showMainMenu = false">
+                                    Estados usuario
+                                </router-link>
+                                <router-link to="/etiquetas" class="nav-dropdown-item" @click.native="showMainMenu = false">
+                                    Etiquetas
+                                </router-link>
+                                <router-link to="/supervision" class="nav-dropdown-item" @click.native="showMainMenu = false">
+                                    Supervisión
+                                </router-link>
+                            </div>
                         </div>
+                    </nav>
+                </div>
+                <div class="header-right">
+                    <div class="connection-indicator" :class="isWhatsAppConnected ? 'online' : 'offline'">
+                        <span class="connection-dot"></span>
+                        <span class="connection-text">{{ isWhatsAppConnected ? 'Conectado' : 'Desconectado' }}</span>
                     </div>
-                </nav>
-                <div class="user-info">
-                    <span>{{ user?.nombre }}</span>
                     <div v-if="statuses.length" class="user-status-dropdown">
-                        <button type="button" class="btn btn-light btn-sm status-btn" @click="toggleStatusDropdown">
+                        <button type="button" class="status-btn" @click="toggleStatusDropdown">
                             <span class="status-dot" :style="{ backgroundColor: currentStatusColor }"></span>
                             <span class="status-label">{{ currentStatusName }}</span>
                             <span class="status-caret">▾</span>
@@ -139,31 +133,29 @@ const Dashboard = {
                             </button>
                         </div>
                     </div>
-                    <button @click="toggleDarkMode" class="btn btn-outline-light btn-sm theme-toggle" :title="darkMode ? 'Modo claro' : 'Modo oscuro'">
+                    <button @click="toggleDarkMode" class="theme-toggle" :title="darkMode ? 'Modo claro' : 'Modo oscuro'">
                         {{ darkMode ? '☀️' : '🌙' }}
                     </button>
                     <div class="user-menu-dropdown">
-                        <button
-                            type="button"
-                            class="btn btn-outline-light btn-sm user-menu-toggle"
-                            @click="showUserMenu = !showUserMenu"
-                        >
-                            {{ user?.nombre || 'Usuario' }} ▾
+                        <button type="button" class="user-menu-toggle" @click="showUserMenu = !showUserMenu">
+                            <span class="user-avatar-sm">{{ (user?.nombre || 'U').charAt(0).toUpperCase() }}</span>
+                            <span class="user-name-label">{{ user?.nombre || 'Usuario' }}</span>
+                            <span class="nav-caret">▾</span>
                         </button>
                         <div v-if="showUserMenu" class="user-menu">
-                            <button
-                                type="button"
-                                class="user-menu-item"
-                                @click="openQRModal"
-                            >
+                            <div class="user-menu-header">
+                                <span class="user-avatar-menu">{{ (user?.nombre || 'U').charAt(0).toUpperCase() }}</span>
+                                <div>
+                                    <div class="user-menu-name">{{ user?.nombre || 'Usuario' }}</div>
+                                    <div class="user-menu-email">{{ user?.correo || '' }}</div>
+                                </div>
+                            </div>
+                            <div class="user-menu-divider"></div>
+                            <button type="button" class="user-menu-item" @click="openQRModal">
                                 <span class="menu-icon">📱</span>
                                 <span>Ver código QR</span>
                             </button>
-                            <button
-                                type="button"
-                                class="user-menu-item"
-                                @click="logout"
-                            >
+                            <button type="button" class="user-menu-item" @click="logout">
                                 <span class="menu-icon">🚪</span>
                                 <span>Cerrar Sesión</span>
                             </button>

@@ -1,0 +1,39 @@
+---
+description: Patrones y convenciones del backend Node.js/Express
+globs: *.js,services/**,controllers/**,routes/**,middleware/**,database/**
+alwaysApply: false
+---
+
+# Patrones Backend
+
+## Estructura de Rutas
+- Las rutas van en `routes/` y usan `express.Router()`
+- Los controladores van en `controllers/` con la lógica de negocio
+- Las rutas protegidas usan el middleware `validateApiKey`
+- Formato de respuesta: `res.json({ ... })` para éxito, `res.status(xxx).json({ error: '...' })` para errores
+
+## Base de Datos (SQLite3)
+- Toda la lógica de DB está en `database/connection.js`
+- Usa callbacks de sqlite3 envueltos en Promises
+- Las migraciones se ejecutan en `initDb()` al iniciar el servidor
+- Los contactos se identifican por `numero` (puede ser teléfono o LID)
+
+## Servicio WhatsApp (Baileys v7.0.0)
+- El cliente Baileys está en `services/whatsappService.js`
+- Variable `socket` es la conexión Baileys (NO confundir con Socket.io)
+- Variable `io` es la referencia a Socket.io (se establece con `setSocketIO()`)
+- `latestQr` almacena el último QR generado (null cuando está conectado)
+- `isReady` indica si el cliente WhatsApp está listo
+- Los JIDs pueden ser: `numero@s.whatsapp.net` (teléfono) o `numero@lid` (Local ID de Baileys v7)
+- Para resolver LIDs usar `remoteJidAlt` / `participantAlt`
+
+## Socket.io Events
+- `whatsapp_status` → `{ connected: boolean }` — estado de conexión
+- `qr_available` → `{ qr: string, qrDataUrl: string }` — nuevo QR disponible
+- `new_message` → mensaje recibido en tiempo real
+- `message_status_update` → actualización de ACK/entrega
+
+## Documentación Swagger
+- Usar JSDoc comments con formato OpenAPI 3.0 en controladores
+- La configuración está en `config/swagger.js`
+- Accesible en `/api-docs`

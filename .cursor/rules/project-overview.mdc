@@ -1,0 +1,54 @@
+---
+description: Arquitectura general del proyecto Whatssy
+globs: 
+alwaysApply: true
+---
+
+# Whatssy - Sistema de Mensajería WhatsApp
+
+## Stack Tecnológico
+- **Backend**: Node.js + Express.js
+- **Frontend**: Vue.js 3 (CDN, sin build step) + Vue Router 4 + Axios
+- **Base de datos**: SQLite3 (archivo `messages.db`)
+- **WebSocket**: Socket.io para comunicación en tiempo real
+- **WhatsApp**: Baileys v7.0.0 (@whiskeysockets/baileys)
+- **Documentación API**: Swagger (swagger-jsdoc + swagger-ui-express) en `/api-docs`
+
+## Estructura del Proyecto
+```
+├── app.js                    # Entry point, Express + Socket.io setup
+├── .env                      # PORT, API_KEY
+├── database/
+│   └── connection.js         # SQLite3 conexión, queries, migraciones
+├── services/
+│   └── whatsappService.js    # Baileys client, envío/recepción mensajes
+├── controllers/
+│   └── whatsappController.js # Lógica de API WhatsApp
+│   └── userController.js     # Autenticación y usuarios
+├── routes/
+│   ├── whatsapp.js           # /api/whatsapp/*
+│   ├── users.js              # /api/users/*
+│   ├── contactos.js          # /api/contactos/*
+│   ├── etiquetas.js          # /api/etiquetas/*
+│   ├── userStatuses.js       # /api/user-statuses/*
+│   └── supervision.js        # /api/supervision/*
+├── middleware/
+│   └── validateApiKey.js     # Middleware de API key (header x-api-key)
+├── config/
+│   └── swagger.js            # Configuración Swagger/OpenAPI
+├── public/
+│   ├── index.html            # SPA entry point
+│   ├── css/style.css         # Estilos globales
+│   └── js/
+│       ├── api.js            # Axios client + interceptors + apiService
+│       └── main.js           # Vue app, componentes, routing
+└── .baileys_auth/            # Sesión de WhatsApp (autogenerado)
+```
+
+## Convenciones Importantes
+- El frontend es una SPA servida estáticamente (NO usa bundler/webpack/vite)
+- Los componentes Vue se definen con template strings en `main.js`
+- La autenticación usa SHA256 para passwords y API key en header `x-api-key`
+- Los contactos WhatsApp pueden usar JIDs con `@s.whatsapp.net` o LIDs con `@lid`
+- Socket.io se usa para: mensajes nuevos, estado de conexión, QR code, actualizaciones de estado
+- El idioma de la interfaz y comentarios es **español**

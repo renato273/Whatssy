@@ -1,0 +1,66 @@
+---
+description: Esquema de base de datos SQLite y operaciones disponibles
+globs: database/**
+alwaysApply: false
+---
+
+# Esquema de Base de Datos
+
+## Tablas Principales
+
+### users
+| Columna | Tipo | Descripción |
+|---------|------|-------------|
+| id | INTEGER PK | Auto-increment |
+| nombre | TEXT | Nombre del usuario |
+| correo | TEXT UNIQUE | Email de login |
+| contraseña | TEXT | SHA256 hash |
+| user_type | INTEGER | 1=admin, 2=usuario normal |
+| status_id | INTEGER FK | Estado actual del usuario |
+
+### contactos
+| Columna | Tipo | Descripción |
+|---------|------|-------------|
+| id | INTEGER PK | Auto-increment |
+| nombre_contacto | TEXT | Nombre visible |
+| numero | TEXT | Teléfono o LID (sin @s.whatsapp.net) |
+| observacion | TEXT | Nota adicional |
+| user_id | INTEGER FK | Usuario asignado |
+
+### messages
+| Columna | Tipo | Descripción |
+|---------|------|-------------|
+| id | INTEGER PK | Auto-increment |
+| numero | TEXT | Número del contacto |
+| message | TEXT | Contenido del mensaje |
+| type | TEXT | 'sent' o 'received' |
+| timestamp | DATETIME | Fecha/hora |
+| payload | TEXT (JSON) | Metadata completa del mensaje |
+| is_read | INTEGER | 0=no leído, 1=leído |
+| ack_status | INTEGER | Estado de entrega (0-4) |
+| user_id | INTEGER FK | Usuario que envió/recibió |
+
+### etiquetas
+| Columna | Tipo | Descripción |
+|---------|------|-------------|
+| id | INTEGER PK | Auto-increment |
+| nombre | TEXT | Nombre de la etiqueta |
+| color | TEXT | Color hex (#rrggbb) |
+
+### contacto_etiquetas
+| Columna | Tipo | Descripción |
+|---------|------|-------------|
+| contacto_id | INTEGER FK | Referencia a contactos |
+| etiqueta_id | INTEGER FK | Referencia a etiquetas |
+
+### user_statuses
+| Columna | Tipo | Descripción |
+|---------|------|-------------|
+| id | INTEGER PK | Auto-increment |
+| nombre | TEXT | Nombre del estado |
+| color | TEXT | Color hex |
+
+## Queries Importantes
+- Los mensajes se buscan por `numero` Y dentro del campo `payload` JSON (para manejar LIDs)
+- Los contactos con mensajes no leídos se obtienen con `getUnreadContactsByUser()`
+- Las operaciones CRUD están centralizadas en `database/connection.js`

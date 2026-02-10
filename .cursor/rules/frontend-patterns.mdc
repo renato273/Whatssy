@@ -1,0 +1,44 @@
+---
+description: Patrones y convenciones del frontend Vue.js
+globs: public/**
+alwaysApply: false
+---
+
+# Patrones Frontend
+
+## Arquitectura
+- Vue 3 cargado desde CDN (NO usa build step, NO usa .vue files)
+- Los componentes se definen en `public/js/main.js` con `template: \`...\``
+- Vue Router 4 para navegación (Login, Dashboard, Admin, Supervision)
+- Axios configurado en `public/js/api.js` con interceptors y `apiService`
+
+## Componentes Principales (en main.js)
+- `Login` — Formulario de autenticación
+- `Dashboard` — Vista principal con contactos, chat, QR modal, toasts
+- `AdminPanel` — Gestión de usuarios, etiquetas, estados
+- `SupervisionPanel` — Supervisión de mensajes por usuario
+
+## Estado del Dashboard
+- `user` — usuario logueado (de localStorage)
+- `contactos` / `selectedContacto` / `messages` — chat actual
+- `isWhatsAppConnected` — estado de conexión WhatsApp
+- `darkMode` — tema oscuro (persistido en localStorage)
+- `toasts` — notificaciones temporales
+- `showQRModal` / `qrDataUrl` — modal de código QR
+
+## Comunicación con Backend
+- API REST via `apiService` (definido en `api.js`)
+- Socket.io para eventos en tiempo real
+- El socket se conecta en `mounted()` del Dashboard
+
+## Estilos
+- CSS puro en `public/css/style.css`
+- Modo oscuro con clase `.dark-mode` en body
+- Bootstrap 5 para grid y utilidades básicas
+- Diseño responsive con media queries
+
+## Importante
+- NO agregar dependencias que requieran build/bundling
+- Las librerías externas se cargan desde CDN en `index.html`
+- El idioma de la UI es **español**
+- Usar `this.showToast(mensaje, tipo, icono)` para notificaciones (NO alert())
