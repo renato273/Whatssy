@@ -1240,8 +1240,16 @@ body {
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
-.qr-code-wrapper canvas {
+.qr-code-wrapper canvas,
+.qr-code-wrapper img {
     display: block;
+    max-width: 100%;
+    height: auto;
+}
+
+.qr-image {
+    width: 300px;
+    height: 300px;
 }
 
 .qr-note {

@@ -436,7 +436,7 @@ const Dashboard = {
                             <p>Generando código QR...</p>
                         </div>
                         <!-- Estado: QR disponible -->
-                        <div v-else-if="qrCode" class="qr-code-content">
+                        <div v-else-if="qrDataUrl" class="qr-code-content">
                             <div class="qr-instructions">
                                 <strong>Para conectar WhatsApp:</strong>
                                 <ol>
@@ -447,9 +447,9 @@ const Dashboard = {
                                 </ol>
                             </div>
                             <div class="qr-code-wrapper">
-                                <canvas ref="qrCanvas"></canvas>
+                                <img :src="qrDataUrl" alt="Código QR WhatsApp" class="qr-image" />
                             </div>
-                            <p class="qr-note">El código se actualiza automáticamente cada 20 segundos</p>
+                            <p class="qr-note">El código se actualiza automáticamente</p>
                         </div>
                         <!-- Estado: Sin QR (esperando generación) -->
                         <div v-else class="qr-status-loading">
@@ -497,6 +497,7 @@ const Dashboard = {
             toastIdCounter: 0,
             showQRModal: false,
             qrCode: null,
+            qrDataUrl: null,
             qrLoading: false,
             qrRefreshInterval: null,
             showUserMenu: false,
@@ -571,7 +572,8 @@ const Dashboard = {
             if (wasConnected !== status.connected) {
                 if (status.connected) {
                     this.showToast('WhatsApp conectado', 'success', '✅');
-                    this.qrCode = null; // Limpiar QR cuando se conecta
+                    this.qrCode = null;
+                    this.qrDataUrl = null;
                 } else {
                     this.showToast('WhatsApp desconectado', 'warning', '⚠️');
                 }
@@ -579,14 +581,10 @@ const Dashboard = {
         });
         
         // Escuchar cuando hay un nuevo QR disponible
-        this.socket.on('qr_available', async (data) => {
+        this.socket.on('qr_available', (data) => {
             if (data.qr) {
                 this.qrCode = data.qr;
-                if (this.showQRModal) {
-                    this.$nextTick(async () => {
-                        await this.renderQR();
-                    });
-                }
+                this.qrDataUrl = data.qrDataUrl || null;
             }
         });
         
@@ -947,36 +945,31 @@ const Dashboard = {
         },
         // Métodos para modal QR
         async openQRModal() {
-            this.showUserMenu = false; // Cerrar menú al abrir modal
+            this.showUserMenu = false;
             this.showQRModal = true;
-            this.qrCode = null;
             
-            // Si ya está conectado, no necesitamos cargar QR
+            // Si ya está conectado, mostrar estado conectado
             if (this.isWhatsAppConnected) {
+                this.qrCode = null;
+                this.qrDataUrl = null;
                 return;
             }
             
+            // Si ya tenemos el QR (recibido por socket), mostrarlo directamente
+            if (this.qrDataUrl) {
+                return;
+            }
+            
+            // Si no tenemos QR, cargarlo desde la API
             await this.loadQR();
             
-            // Renderizar QR después de que el modal se haya mostrado
-            this.$nextTick(async () => {
-                if (this.qrCode) {
-                    await this.renderQR();
-                }
-            });
-            
-            // Iniciar actualización periódica del QR cada 20 segundos si no está conectado
+            // Actualización periódica si no está conectado
             if (!this.isWhatsAppConnected) {
                 this.qrRefreshInterval = setInterval(async () => {
-                    if (this.showQRModal && !this.isWhatsAppConnected) {
+                    if (this.showQRModal && !this.isWhatsAppConnected && !this.qrDataUrl) {
                         await this.loadQR();
-                        this.$nextTick(async () => {
-                            if (this.qrCode) {
-                                await this.renderQR();
-                            }
-                        });
                     }
-                }, 20000);
+                }, 10000);
             }
         },
         closeQRModal() {
@@ -993,43 +986,25 @@ const Dashboard = {
                 const response = await apiService.getQR();
                 if (response && response.qr) {
                     this.qrCode = response.qr;
+                    this.qrDataUrl = response.qrDataUrl || null;
                 } else {
                     this.qrCode = null;
+                    this.qrDataUrl = null;
                 }
             } catch (error) {
-                // Solo loggear errores inesperados
                 if (error.response?.status && error.response.status !== 404) {
                     console.error('Error al cargar QR:', error);
                 }
                 this.qrCode = null;
+                this.qrDataUrl = null;
             } finally {
                 this.qrLoading = false;
             }
         },
         async refreshQR() {
             this.qrCode = null;
+            this.qrDataUrl = null;
             await this.loadQR();
-            this.$nextTick(async () => {
-                if (this.qrCode) {
-                    await this.renderQR();
-                }
-            });
-        },
-        async renderQR() {
-            if (!this.qrCode || !this.$refs.qrCanvas) return;
-            
-            try {
-                await QRCode.toCanvas(this.$refs.qrCanvas, this.qrCode, {
-                    width: 300,
-                    margin: 2,
-                    color: {
-                        dark: '#000000',
-                        light: '#FFFFFF'
-                    }
-                });
-            } catch (error) {
-                console.error('Error al renderizar QR:', error);
-            }
         },
         async loadContactTags() {
             if (!this.selectedContacto) {

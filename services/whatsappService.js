@@ -16,7 +16,8 @@ const { writeFile } = require('fs').promises;
 
 let socket = null;
 let receivedMessages = []; // Arreglo para almacenar los mensajes recibidos
-let latestQr = null; // Último QR recibido
+let latestQr = null; // Último QR recibido (string raw)
+let latestQrDataUrl = null; // Último QR como data URL (imagen base64)
 let isReady = false; // Estado de preparación del cliente
 let reconnectAttempts = 0;
 const MAX_RECONNECT_ATTEMPTS = 5;
@@ -63,6 +64,19 @@ async function connectToWhatsApp() {
             if (qr) {
                 latestQr = qr;
                 isReady = false;
+                
+                // Generar QR como data URL (imagen base64) para el frontend
+                try {
+                    latestQrDataUrl = await qrcode.toDataURL(qr, {
+                        width: 300,
+                        margin: 2,
+                        color: { dark: '#000000', light: '#FFFFFF' }
+                    });
+                } catch (e) {
+                    console.error('Error generando QR data URL:', e);
+                    latestQrDataUrl = null;
+                }
+                
                 console.log('\n========================================');
                 console.log('📱 Escanea el código QR con tu WhatsApp');
                 console.log('   1. Abre WhatsApp en tu teléfono');
@@ -79,7 +93,7 @@ async function connectToWhatsApp() {
                 
                 // Emitir evento de QR disponible a través de Socket.io
                 if (io) {
-                    io.emit('qr_available', { qr: qr });
+                    io.emit('qr_available', { qr: qr, qrDataUrl: latestQrDataUrl });
                 }
             }
 
@@ -146,6 +160,7 @@ async function connectToWhatsApp() {
                 reconnectAttempts = 0;
                 isReady = true;
                 latestQr = null;
+                latestQrDataUrl = null;
                 console.log('\n========================================');
                 console.log('✅ ¡WhatsApp Web conectado exitosamente!');
                 console.log('✅ El cliente está listo para enviar y recibir mensajes');
@@ -515,6 +530,10 @@ function getLatestQr() {
     return latestQr;
 }
 
+function getLatestQrDataUrl() {
+    return latestQrDataUrl;
+}
+
 function isClientReady() {
     return isReady && socket !== null;
 }
@@ -541,6 +560,7 @@ module.exports = {
     sendMessage,
     getReceivedMessages,
     getLatestQr,
+    getLatestQrDataUrl,
     isClientReady,
     getClientState,
     setSocketIO,

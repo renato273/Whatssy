@@ -459,7 +459,8 @@ function getQr(req, res) {
             .json({ error: 'No hay un QR disponible actualmente' });
     }
 
-    res.json({ qr });
+    const qrDataUrl = whatsappService.getLatestQrDataUrl();
+    res.json({ qr, qrDataUrl });
 }
 
 function getStatus(req, res) {

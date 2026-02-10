@@ -100,6 +100,17 @@ app.use((err, req, res, next) => {
 io.on('connection', (socket) => {
     console.log('✅ Cliente conectado a Socket.io:', socket.id);
 
+    // Enviar estado actual de WhatsApp al nuevo cliente
+    const state = whatsappService.getClientState();
+    socket.emit('whatsapp_status', { connected: state.isReady });
+
+    // Si hay un QR disponible, enviarlo al nuevo cliente
+    const qr = whatsappService.getLatestQr();
+    if (qr) {
+        const qrDataUrl = whatsappService.getLatestQrDataUrl();
+        socket.emit('qr_available', { qr, qrDataUrl });
+    }
+
     socket.on('disconnect', () => {
         console.log('❌ Cliente desconectado de Socket.io:', socket.id);
     });
