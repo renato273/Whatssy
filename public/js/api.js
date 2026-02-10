@@ -136,6 +136,16 @@ const apiService = {
         return response.data;
     },
 
+    // Foto de perfil de WhatsApp
+    async getProfilePicture(numero) {
+        try {
+            const response = await api.get(`/whatsapp/profile-picture/${encodeURIComponent(numero)}`);
+            return response.data;
+        } catch (error) {
+            return { profilePicUrl: null };
+        }
+    },
+
     // Mensajes
     async getMessages(numero) {
         const response = await api.get(`/whatsapp/messages?numero=${encodeURIComponent(numero)}`);
@@ -178,6 +188,11 @@ const apiService = {
         if (response.status === 404) {
             return { qr: null };
         }
+        return response.data;
+    },
+
+    async logoutWhatsApp() {
+        const response = await api.post('/whatsapp/logout');
         return response.data;
     },
 };

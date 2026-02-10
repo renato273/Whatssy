@@ -11,5 +11,7 @@ router.post('/messages/read', whatsappController.markMessagesAsRead);
 router.get('/qr', whatsappController.getQr);
 router.get('/status', whatsappController.getStatus);
 router.get('/messages/:id/status', whatsappController.getMessageStatus);
+router.get('/profile-picture/:numero', whatsappController.getProfilePicture);
+router.post('/logout', whatsappController.logoutWhatsApp);
 
 module.exports = router;

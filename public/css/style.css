@@ -136,6 +136,21 @@ body {
     to { opacity: 1; transform: translateY(0); }
 }
 
+.login-logo {
+    width: 56px;
+    height: 56px;
+    margin: 0 auto 1rem;
+    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+    color: white;
+    border-radius: var(--radius-xl);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.75rem;
+    font-weight: 800;
+    box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35);
+}
+
 .login-card h1 {
     color: var(--primary);
     margin-bottom: 0.35rem;
@@ -159,6 +174,21 @@ body {
     gap: 1.25rem;
 }
 
+.btn-login {
+    width: 100%;
+    padding: 0.85rem 1.5rem;
+    font-size: var(--text-base);
+    margin-top: 0.5rem;
+}
+
+.login-footer {
+    text-align: center;
+    margin-top: 1.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border-color-light);
+    font-size: var(--text-xs);
+}
+
 .form-group {
     display: flex;
     flex-direction: column;
@@ -172,7 +202,8 @@ body {
 }
 
 .form-group input,
-.form-group textarea {
+.form-group textarea,
+.form-group select {
     padding: 0.75rem 1rem;
     border: 1.5px solid var(--border-color);
     border-radius: var(--radius-md);
@@ -183,7 +214,8 @@ body {
 }
 
 .form-group input:focus,
-.form-group textarea:focus {
+.form-group textarea:focus,
+.form-group select:focus {
     outline: none;
     border-color: var(--primary);
     box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
@@ -626,6 +658,7 @@ body {
     padding: 1.5rem;
     width: 100%;
     overflow-y: auto;
+    background: var(--gray-50);
 }
 
 .contacts-table-card {
@@ -634,8 +667,9 @@ body {
     box-shadow: var(--shadow-md);
     padding: 1.5rem;
     width: 100%;
-    max-width: 900px;
+    max-width: 1000px;
     margin: 0 auto;
+    border: 1px solid var(--border-color-light);
 }
 
 .contacts-filters {
@@ -805,6 +839,7 @@ body {
     margin-right: 0.85rem;
     flex-shrink: 0;
     letter-spacing: -0.02em;
+    overflow: hidden;
 }
 
 .contact-info {
@@ -951,6 +986,122 @@ body {
     font-weight: 700;
     font-size: var(--text-lg);
     flex-shrink: 0;
+    overflow: hidden;
+}
+
+/* Profile picture image in avatars */
+.avatar-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 50%;
+}
+
+/* Table avatar (contact list page) */
+.table-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--primary-light) 0%, var(--primary) 100%);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: var(--text-sm);
+    flex-shrink: 0;
+    overflow: hidden;
+}
+
+/* Chat header actions */
+.chat-header-actions {
+    display: flex;
+    gap: 0.4rem;
+    margin-top: 0.35rem;
+    flex-wrap: wrap;
+}
+
+.chat-header-actions .tag-edit-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+}
+
+.chat-header-actions .btn-icon {
+    font-size: var(--text-sm);
+}
+
+/* Contact cards (mobile view in contact list) */
+.contacts-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: 0.5rem 0;
+}
+
+.contact-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: 1rem;
+    transition: var(--transition-base);
+}
+
+.contact-card:hover {
+    border-color: var(--primary-light);
+    box-shadow: var(--shadow-sm);
+}
+
+.contact-card-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.5rem;
+}
+
+.contact-card-name {
+    font-weight: 600;
+    color: var(--text-primary);
+    font-size: var(--text-base);
+}
+
+.contact-card-number {
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+}
+
+.contact-card-obs {
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+    margin-bottom: 0.5rem;
+    padding-left: 0.25rem;
+}
+
+.contact-card-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--border-color-light);
+}
+
+.contact-card-date {
+    font-size: var(--text-xs);
+    color: var(--text-tertiary);
+}
+
+.contact-card-actions {
+    display: flex;
+    gap: 0.4rem;
+}
+
+/* Desktop/Mobile visibility helpers */
+.mobile-only {
+    display: none;
+}
+
+.desktop-only {
+    display: table;
 }
 
 .chat-name {
@@ -1189,6 +1340,155 @@ body {
     text-align: center;
     color: var(--text-muted);
     font-size: var(--text-base);
+}
+
+/* ============================================
+   Admin View Elements
+   ============================================ */
+
+/* Status badges */
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.2rem 0.65rem;
+    border-radius: 999px;
+    font-size: var(--text-xs);
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+.status-badge.active {
+    background: var(--success-light);
+    color: var(--success-dark);
+}
+.status-badge.inactive {
+    background: var(--gray-100);
+    color: var(--gray-500);
+}
+
+/* Code badges */
+.code-badge {
+    display: inline-block;
+    padding: 0.15rem 0.5rem;
+    background: var(--gray-100);
+    border: 1px solid var(--border-color-light);
+    border-radius: var(--radius-sm);
+    font-size: var(--text-xs);
+    font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+    color: var(--primary-dark);
+}
+
+/* Color swatches */
+.color-swatch {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border-radius: 999px;
+    border: 2px solid rgba(0,0,0,0.08);
+    vertical-align: middle;
+}
+.color-swatch-lg {
+    display: inline-block;
+    width: 36px;
+    height: 36px;
+    border-radius: var(--radius-md);
+    border: 2px solid rgba(0,0,0,0.08);
+    flex-shrink: 0;
+}
+
+/* Role badges */
+.role-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.2rem 0.55rem;
+    border-radius: 999px;
+    font-size: var(--text-xs);
+    font-weight: 600;
+}
+.role-badge.admin {
+    background: var(--primary-50);
+    color: var(--primary-dark);
+}
+.role-badge.user {
+    background: var(--gray-100);
+    color: var(--gray-600);
+}
+
+/* Unread badges */
+.unread-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 24px;
+    height: 24px;
+    padding: 0 0.4rem;
+    background: var(--error);
+    color: white;
+    border-radius: 999px;
+    font-size: var(--text-xs);
+    font-weight: 700;
+    border: none;
+    cursor: pointer;
+    transition: all var(--transition-base);
+}
+.unread-badge:hover {
+    background: var(--error-dark, #dc2626);
+    transform: scale(1.1);
+}
+
+/* Filter select */
+.filter-select {
+    padding: 0.4rem 0.75rem;
+    border: 1.5px solid var(--border-color);
+    border-radius: var(--radius-md);
+    font-size: var(--text-sm);
+    background: var(--bg-surface);
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: border-color var(--transition-base);
+}
+.filter-select:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
+/* Supervision cards */
+.supervision-card-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    padding: 0.75rem 0;
+}
+.stat-item {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: var(--text-sm);
+}
+.stat-label {
+    color: var(--text-muted);
+    font-size: var(--text-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+/* Unread section */
+.unread-section {
+    margin-top: 1.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border-color-light);
+}
+.unread-section-title {
+    font-size: var(--text-base);
+    font-weight: 700;
+    margin-bottom: 0.75rem;
+    color: var(--text-primary);
+}
+
+/* Text helpers */
+.text-muted {
+    color: var(--text-muted);
 }
 
 /* ============================================
@@ -1601,6 +1901,55 @@ body {
     .login-card h2 {
         font-size: var(--text-sm);
     }
+
+    /* Desktop/Mobile visibility */
+    .desktop-only {
+        display: none !important;
+    }
+
+    .mobile-only {
+        display: flex !important;
+    }
+
+    /* Chat header actions on mobile */
+    .chat-header-actions .btn-label {
+        display: none;
+    }
+
+    .chat-header-actions .tag-edit-btn {
+        padding: 0.3rem 0.5rem;
+        font-size: var(--text-sm);
+    }
+
+    /* Contact cards responsive */
+    .contact-card {
+        padding: 0.85rem;
+    }
+
+    .contact-card-footer {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+    }
+
+    .contact-card-actions {
+        width: 100%;
+        justify-content: flex-end;
+    }
+
+    /* Contact list page mobile */
+    .contacts-table-card {
+        padding: 0.75rem;
+    }
+
+    .contacts-header {
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+
+    .contacts-header h2 {
+        font-size: var(--text-lg);
+    }
 }
 
 /* ============================================
@@ -1749,6 +2098,31 @@ body {
 
 .qr-status-connected .qr-status-note {
     color: #047857;
+}
+
+.btn-disconnect {
+    margin-top: 1.25rem;
+    padding: 0.65rem 1.25rem;
+    font-size: var(--text-sm);
+    border: none;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    font-weight: 600;
+    transition: all var(--transition-base);
+}
+
+.btn-disconnect:hover {
+    transform: scale(1.02);
+    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.35);
+}
+
+/* User menu danger item */
+.user-menu-item.danger {
+    color: var(--error);
+}
+.user-menu-item.danger:hover {
+    background: var(--error-light);
+    color: var(--error-dark, #dc2626);
 }
 
 .qr-status-loading p {
@@ -2174,14 +2548,16 @@ body {
 }
 
 .dark-mode .form-group input,
-.dark-mode .form-group textarea {
+.dark-mode .form-group textarea,
+.dark-mode .form-group select {
     background: var(--gray-900);
     border-color: var(--border-color);
     color: var(--text-primary);
 }
 
 .dark-mode .form-group input:focus,
-.dark-mode .form-group textarea:focus {
+.dark-mode .form-group textarea:focus,
+.dark-mode .form-group select:focus {
     border-color: var(--primary);
     box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
 }
@@ -2243,9 +2619,13 @@ body {
 }
 
 /* Dark Mode - Tables */
+.dark-mode .contact-list-page {
+    background: var(--gray-950);
+}
 .dark-mode .contacts-table-card {
     background: var(--gray-800);
     box-shadow: var(--shadow-md);
+    border-color: var(--gray-700);
 }
 
 .dark-mode .contacts-table th {
@@ -2261,6 +2641,34 @@ body {
 
 .dark-mode .contacts-table tr:hover td {
     background: var(--gray-700);
+}
+
+/* Dark Mode - Contact Cards */
+.dark-mode .contact-card {
+    background: var(--gray-800);
+    border-color: var(--gray-700);
+}
+
+.dark-mode .contact-card:hover {
+    border-color: var(--primary);
+    background: var(--gray-750);
+}
+
+.dark-mode .contact-card-name {
+    color: var(--gray-100);
+}
+
+.dark-mode .contact-card-number,
+.dark-mode .contact-card-obs {
+    color: var(--gray-400);
+}
+
+.dark-mode .contact-card-footer {
+    border-color: var(--gray-700);
+}
+
+.dark-mode .contact-card-date {
+    color: var(--gray-500);
 }
 
 /* Dark Mode - QR Modal */
@@ -2306,6 +2714,22 @@ body {
 
 .dark-mode .qr-status-connected .qr-status-note {
     color: #a7f3d0;
+}
+
+.dark-mode .btn-disconnect {
+    background: #ef4444;
+    color: white;
+}
+.dark-mode .btn-disconnect:hover {
+    background: #dc2626;
+}
+
+.dark-mode .user-menu-item.danger {
+    color: #f87171;
+}
+.dark-mode .user-menu-item.danger:hover {
+    background: rgba(239, 68, 68, 0.15);
+    color: #fca5a5;
 }
 
 .dark-mode .qr-status-loading p {
@@ -2366,14 +2790,69 @@ body {
     background: var(--gray-500);
 }
 
-/* Dark Mode - Login */
-.dark-mode .login-card {
-    background: rgba(30, 41, 59, 0.95);
-    box-shadow: 0 25px 50px rgba(0, 0, 0, 0.4);
+/* Dark Mode - Admin Elements */
+.dark-mode .status-badge.active {
+    background: rgba(16, 185, 129, 0.15);
+    color: #34d399;
+}
+.dark-mode .status-badge.inactive {
+    background: var(--gray-700);
+    color: var(--gray-400);
+}
+.dark-mode .code-badge {
+    background: var(--gray-700);
+    border-color: var(--gray-600);
+    color: var(--primary-light);
+}
+.dark-mode .color-swatch,
+.dark-mode .color-swatch-lg {
+    border-color: rgba(255,255,255,0.12);
+}
+.dark-mode .role-badge.admin {
+    background: rgba(99, 102, 241, 0.15);
+    color: var(--primary-light);
+}
+.dark-mode .role-badge.user {
+    background: var(--gray-700);
+    color: var(--gray-400);
+}
+.dark-mode .unread-badge {
+    background: #ef4444;
+}
+.dark-mode .filter-select {
+    background: var(--gray-800);
+    border-color: var(--gray-600);
+    color: var(--text-primary);
+}
+.dark-mode .filter-select:focus {
+    border-color: var(--primary-light);
+}
+.dark-mode .unread-section {
+    border-top-color: var(--gray-700);
+}
+.dark-mode .text-muted {
+    color: var(--text-muted);
 }
 
+/* Dark Mode - Login */
+.dark-mode .login-container {
+    background: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #1e293b 100%);
+}
+.dark-mode .login-card {
+    background: rgba(30, 41, 59, 0.95);
+    box-shadow: 0 25px 50px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+.dark-mode .login-card h1 {
+    color: var(--primary-light);
+}
 .dark-mode .login-card h2 {
     color: var(--text-secondary);
+}
+.dark-mode .login-logo {
+    box-shadow: 0 4px 14px rgba(99, 102, 241, 0.25);
+}
+.dark-mode .login-footer {
+    border-top-color: var(--gray-700);
 }
 
 .dark-mode .error-message {

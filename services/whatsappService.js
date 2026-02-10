@@ -537,6 +537,30 @@ async function sendMessage(chatId, mensaje) {
     }
 }
 
+async function getProfilePicture(numero) {
+    if (!isReady || !socket) {
+        throw new Error('El cliente de WhatsApp no está listo.');
+    }
+
+    // Asegurar formato correcto del JID
+    let jid = numero;
+    if (!jid.includes('@')) {
+        jid = `${jid}@s.whatsapp.net`;
+    }
+
+    try {
+        const url = await socket.profilePictureUrl(jid, 'image');
+        return url || null;
+    } catch (error) {
+        // Baileys lanza error 404 si el usuario no tiene foto de perfil
+        if (error?.output?.statusCode === 404 || error?.message?.includes('404')) {
+            return null;
+        }
+        console.error('Error al obtener foto de perfil:', error);
+        return null;
+    }
+}
+
 function getReceivedMessages() {
     return receivedMessages;
 }
@@ -560,6 +584,61 @@ function getClientState() {
     };
 }
 
+/**
+ * Cierra la sesión de WhatsApp, elimina credenciales y reconecta para generar nuevo QR
+ */
+async function logoutWhatsApp() {
+    console.log('\n🔄 Cerrando sesión de WhatsApp...');
+    
+    try {
+        // Intentar logout limpio a través de Baileys
+        if (socket) {
+            try {
+                await socket.logout();
+                console.log('✅ Logout de Baileys ejecutado correctamente');
+            } catch (logoutErr) {
+                console.log('⚠️  Error en socket.logout(), forzando desconexión:', logoutErr?.message || logoutErr);
+                try {
+                    socket.end(undefined);
+                } catch (e) { /* ignore */ }
+            }
+            socket = null;
+        }
+    } catch (e) {
+        console.error('Error al cerrar socket:', e);
+    }
+    
+    // Limpiar estado
+    isReady = false;
+    latestQr = null;
+    latestQrDataUrl = null;
+    reconnectAttempts = 0;
+    
+    // Eliminar carpeta de autenticación
+    try {
+        if (fs.existsSync(authFolder)) {
+            fs.rmSync(authFolder, { recursive: true, force: true });
+            console.log('🗑️  Sesión anterior eliminada.');
+        }
+    } catch (e) {
+        console.error('Error al eliminar carpeta de auth:', e);
+    }
+    
+    // Emitir estado desconectado
+    if (io) {
+        io.emit('whatsapp_status', { connected: false });
+        io.emit('whatsapp_logged_out', {});
+    }
+    
+    // Reconectar después de un breve delay para generar nuevo QR
+    console.log('🔄 Reconectando para generar nuevo QR...\n');
+    setTimeout(() => {
+        connectToWhatsApp();
+    }, 2000);
+    
+    return { success: true, message: 'Sesión cerrada. Se generará un nuevo QR.' };
+}
+
 // Inicializar el cliente
 console.log('🔄 Inicializando cliente de WhatsApp con Baileys...');
 console.log('📂 Buscando sesión guardada...\n');
@@ -573,10 +652,12 @@ function setSocketIO(socketIO) {
 
 module.exports = {
     sendMessage,
+    getProfilePicture,
     getReceivedMessages,
     getLatestQr,
     getLatestQrDataUrl,
     isClientReady,
     getClientState,
     setSocketIO,
+    logoutWhatsApp,
 };

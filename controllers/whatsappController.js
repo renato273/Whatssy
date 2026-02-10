@@ -478,6 +478,54 @@ function getStatus(req, res) {
     }
 }
 
+/**
+ * @swagger
+ * /api/whatsapp/profile-picture/{numero}:
+ *   get:
+ *     summary: Obtener foto de perfil de un contacto de WhatsApp
+ *     parameters:
+ *       - in: path
+ *         name: numero
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Número de teléfono del contacto
+ *     responses:
+ *       200:
+ *         description: URL de la foto de perfil
+ *       503:
+ *         description: WhatsApp no conectado
+ */
+async function getProfilePicture(req, res) {
+    const { numero } = req.params;
+
+    if (!numero) {
+        return res.status(400).json({ error: 'Número de teléfono requerido' });
+    }
+
+    if (!whatsappService.isClientReady()) {
+        return res.status(503).json({ error: 'WhatsApp no está conectado', profilePicUrl: null });
+    }
+
+    try {
+        const url = await whatsappService.getProfilePicture(numero);
+        res.json({ profilePicUrl: url });
+    } catch (error) {
+        console.error('Error al obtener foto de perfil:', error);
+        res.json({ profilePicUrl: null });
+    }
+}
+
+async function logoutWhatsApp(req, res) {
+    try {
+        const result = await whatsappService.logoutWhatsApp();
+        res.json(result);
+    } catch (error) {
+        console.error('Error al cerrar sesión de WhatsApp:', error);
+        res.status(500).json({ error: 'Error al cerrar sesión de WhatsApp' });
+    }
+}
+
 module.exports = {
     sendMessage,
     getReceivedMessages,
@@ -485,5 +533,7 @@ module.exports = {
     getMessageStatus,
     markMessagesAsRead,
     getStatus,
+    getProfilePicture,
+    logoutWhatsApp,
 };
 

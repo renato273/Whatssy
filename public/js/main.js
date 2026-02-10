@@ -6,34 +6,41 @@ const Login = {
     template: `
         <div class="login-container">
             <div class="login-card">
+                <div class="login-logo">W</div>
                 <h1>Whatssy</h1>
-                <h2>Iniciar Sesión</h2>
+                <h2>Inicia sesion para continuar</h2>
                 <form @submit.prevent="handleLogin" class="login-form">
                     <div class="form-group">
-                        <label for="correo">Correo Electrónico</label>
+                        <label for="correo">Correo electronico</label>
                         <input
                             id="correo"
                             type="email"
                             v-model="correo"
                             required
                             placeholder="tu@correo.com"
+                            autocomplete="email"
                         />
                     </div>
                     <div class="form-group">
-                        <label for="contraseña">Contraseña</label>
+                        <label for="password">Contrasena</label>
                         <input
-                            id="contraseña"
+                            id="password"
                             type="password"
                             v-model="contraseña"
                             required
-                            placeholder="Tu contraseña"
+                            placeholder="Tu contrasena"
+                            autocomplete="current-password"
                         />
                     </div>
                     <div v-if="error" class="error-message">{{ error }}</div>
-                    <button type="submit" :disabled="loading" class="btn btn-primary w-100">
-                        {{ loading ? 'Iniciando sesión...' : 'Iniciar Sesión' }}
+                    <button type="submit" :disabled="loading" class="btn btn-primary btn-login">
+                        <span v-if="loading" class="btn-loading">Ingresando...</span>
+                        <span v-else>Iniciar sesion</span>
                     </button>
                 </form>
+                <div class="login-footer">
+                    <span class="text-muted">Whatssy Messaging Platform</span>
+                </div>
             </div>
         </div>
     `,
@@ -44,6 +51,10 @@ const Login = {
             error: '',
             loading: false,
         };
+    },
+    mounted() {
+        const darkMode = localStorage.getItem('darkMode') === 'true';
+        document.body.classList.toggle('dark-mode', darkMode);
     },
     methods: {
         async handleLogin() {
@@ -62,7 +73,7 @@ const Login = {
                 // Redirigir al dashboard
                 this.$router.push('/dashboard');
             } catch (error) {
-                this.error = error.response?.data?.error || 'Error al iniciar sesión';
+                this.error = error.response?.data?.error || 'Error al iniciar sesion';
             } finally {
                 this.loading = false;
             }
@@ -153,11 +164,16 @@ const Dashboard = {
                             <div class="user-menu-divider"></div>
                             <button type="button" class="user-menu-item" @click="openQRModal">
                                 <span class="menu-icon">📱</span>
-                                <span>Ver código QR</span>
+                                <span>Ver codigo QR</span>
                             </button>
+                            <button type="button" class="user-menu-item danger" @click="logoutWhatsApp">
+                                <span class="menu-icon">📴</span>
+                                <span>Desconectar WhatsApp</span>
+                            </button>
+                            <div class="user-menu-divider"></div>
                             <button type="button" class="user-menu-item" @click="logout">
                                 <span class="menu-icon">🚪</span>
-                                <span>Cerrar Sesión</span>
+                                <span>Cerrar sesion</span>
                             </button>
                         </div>
                     </div>
@@ -201,7 +217,10 @@ const Dashboard = {
                             @click="selectContacto(contacto)"
                             :class="['contact-item', { active: selectedContacto?.id === contacto.id }]"
                         >
-                            <div class="contact-avatar">{{ contacto.nombre_contacto.charAt(0).toUpperCase() }}</div>
+                            <div class="contact-avatar">
+                                <img v-if="contacto.profilePicUrl" :src="contacto.profilePicUrl" alt="" class="avatar-img" />
+                                <span v-else>{{ contacto.nombre_contacto.charAt(0).toUpperCase() }}</span>
+                            </div>
                             <div class="contact-info">
                                 <div class="contact-name">{{ contacto.nombre_contacto }}</div>
                                 <div class="contact-number">
@@ -233,7 +252,10 @@ const Dashboard = {
                         <div class="chat-header">
                             <button @click="goBackToContacts" class="btn-back" title="Volver a contactos">←</button>
                             <div class="chat-contact-info">
-                                <div class="chat-avatar">{{ selectedContacto.nombre_contacto.charAt(0).toUpperCase() }}</div>
+                                <div class="chat-avatar">
+                                    <img v-if="contactProfilePic" :src="contactProfilePic" alt="" class="avatar-img" />
+                                    <span v-else>{{ selectedContacto.nombre_contacto.charAt(0).toUpperCase() }}</span>
+                                </div>
                                 <div>
                                     <div class="chat-name">{{ selectedContacto.nombre_contacto }}</div>
                                     <div class="chat-number">{{ selectedContacto.numero }}</div>
@@ -248,14 +270,26 @@ const Dashboard = {
                                             {{ tag.nombre }}
                                         </span>
                                     </div>
-                                    <button
-                                        v-if="isAdmin"
-                                        class="tag-edit-btn"
-                                        type="button"
-                                        @click="openTagModal"
-                                    >
-                                        Editar etiquetas
-                                    </button>
+                                    <div class="chat-header-actions">
+                                        <button
+                                            class="tag-edit-btn"
+                                            type="button"
+                                            @click="openEditContact"
+                                            title="Editar contacto"
+                                        >
+                                            <span class="btn-icon">&#9998;</span>
+                                            <span class="btn-label">Editar contacto</span>
+                                        </button>
+                                        <button
+                                            v-if="isAdmin"
+                                            class="tag-edit-btn"
+                                            type="button"
+                                            @click="openTagModal"
+                                        >
+                                            <span class="btn-icon">&#127991;</span>
+                                            <span class="btn-label">Editar etiquetas</span>
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -376,6 +410,31 @@ const Dashboard = {
                 </div>
             </div>
 
+            <!-- Modal para editar contacto -->
+            <div v-if="showEditContact" class="modal-overlay" @click="showEditContact = false">
+                <div class="modal" @click.stop>
+                    <h3>Editar Contacto</h3>
+                    <form @submit.prevent="editContactoSubmit">
+                        <div class="form-group">
+                            <label>Nombre</label>
+                            <input v-model="editContacto.nombre_contacto" required />
+                        </div>
+                        <div class="form-group">
+                            <label>Numero</label>
+                            <input v-model="editContacto.numero" required />
+                        </div>
+                        <div class="form-group">
+                            <label>Observacion</label>
+                            <textarea v-model="editContacto.observacion"></textarea>
+                        </div>
+                        <div class="modal-actions">
+                            <button type="button" @click="showEditContact = false" class="btn btn-outline-secondary">Cancelar</button>
+                            <button type="submit" class="btn btn-primary">Actualizar</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
             <!-- Modal para editar etiquetas de contacto -->
             <div v-if="showTagModal" class="modal-overlay" @click="closeTagModal">
                 <div class="modal" @click.stop>
@@ -412,41 +471,50 @@ const Dashboard = {
             <div v-if="showQRModal" class="modal-overlay" @click="closeQRModal">
                 <div class="modal qr-modal" @click.stop>
                     <div class="modal-header">
-                        <h3>Conexión WhatsApp</h3>
+                        <h3>Conexion WhatsApp</h3>
                         <button type="button" class="modal-close" @click="closeQRModal">&times;</button>
                     </div>
                     <div class="qr-container">
+                        <!-- Estado: Desconectando -->
+                        <div v-if="waLoggingOut" class="qr-status-loading">
+                            <div class="qr-status-icon spinner">⏳</div>
+                            <p>Cerrando sesion de WhatsApp...</p>
+                            <p class="qr-note">Se generara un nuevo codigo QR en unos segundos.</p>
+                        </div>
                         <!-- Estado: Conectado -->
-                        <div v-if="isWhatsAppConnected" class="qr-status-connected">
+                        <div v-else-if="isWhatsAppConnected" class="qr-status-connected">
                             <div class="qr-status-icon">✅</div>
                             <h4>WhatsApp conectado</h4>
-                            <p class="qr-status-note">Tu sesión de WhatsApp está activa y funcionando correctamente.</p>
+                            <p class="qr-status-note">Tu sesion de WhatsApp esta activa y funcionando correctamente.</p>
+                            <button type="button" class="btn btn-danger btn-disconnect" @click="logoutWhatsApp">
+                                📴 Desconectar y escanear nuevo QR
+                            </button>
                         </div>
                         <!-- Estado: Cargando QR -->
                         <div v-else-if="qrLoading" class="qr-status-loading">
                             <div class="qr-status-icon spinner">⏳</div>
-                            <p>Generando código QR...</p>
+                            <p>Generando codigo QR...</p>
                         </div>
                         <!-- Estado: QR disponible -->
                         <div v-else-if="qrDataUrl" class="qr-code-content">
                             <div class="qr-instructions">
                                 <strong>Para conectar WhatsApp:</strong>
                                 <ol>
-                                    <li>Abre WhatsApp en tu teléfono</li>
-                                    <li>Ve a <strong>Configuración → Dispositivos vinculados</strong></li>
+                                    <li>Abre WhatsApp en tu telefono</li>
+                                    <li>Ve a <strong>Configuracion - Dispositivos vinculados</strong></li>
                                     <li>Toca <strong>Vincular un dispositivo</strong></li>
-                                    <li>Escanea este código QR</li>
+                                    <li>Escanea este codigo QR</li>
                                 </ol>
                             </div>
                             <div class="qr-code-wrapper">
-                                <img :src="qrDataUrl" alt="Código QR WhatsApp" class="qr-image" />
+                                <img :src="qrDataUrl" alt="Codigo QR WhatsApp" class="qr-image" />
                             </div>
-                            <p class="qr-note">El código se actualiza automáticamente</p>
+                            <p class="qr-note">El codigo se actualiza automaticamente</p>
                         </div>
-                        <!-- Estado: Sin QR (esperando generación) -->
+                        <!-- Estado: Sin QR (esperando generacion) -->
                         <div v-else class="qr-status-loading">
                             <div class="qr-status-icon">📱</div>
-                            <p>Esperando código QR del servidor...</p>
+                            <p>Esperando codigo QR del servidor...</p>
                             <button type="button" class="btn btn-primary btn-sm" @click="refreshQR">Reintentar</button>
                         </div>
                     </div>
@@ -492,7 +560,16 @@ const Dashboard = {
             qrDataUrl: null,
             qrLoading: false,
             qrRefreshInterval: null,
+            waLoggingOut: false,
             showUserMenu: false,
+            contactProfilePic: null,
+            showEditContact: false,
+            editContacto: {
+                id: null,
+                nombre_contacto: '',
+                numero: '',
+                observacion: '',
+            },
         };
     },
     computed: {
@@ -577,7 +654,17 @@ const Dashboard = {
             if (data.qr) {
                 this.qrCode = data.qr;
                 this.qrDataUrl = data.qrDataUrl || null;
+                // Si estabamos esperando un QR tras logout, ya llego
+                if (this.waLoggingOut) {
+                    this.waLoggingOut = false;
+                }
             }
+        });
+        
+        this.socket.on('whatsapp_logged_out', () => {
+            this.isWhatsAppConnected = false;
+            this.qrCode = null;
+            this.qrDataUrl = null;
         });
         
         // Verificar estado inicial
@@ -790,7 +877,10 @@ const Dashboard = {
         async loadContactos() {
             try {
                 const response = await apiService.getContactos(this.user?.id);
-                this.contactos = response.contactos || [];
+                const contactos = response.contactos || [];
+                // Initialize profilePicUrl for Vue reactivity
+                contactos.forEach(c => { c.profilePicUrl = c.profilePicUrl || null; });
+                this.contactos = contactos;
             } catch (error) {
                 console.error('Error al cargar contactos:', error);
             } finally {
@@ -799,9 +889,11 @@ const Dashboard = {
         },
         async selectContacto(contacto) {
             this.selectedContacto = contacto;
+            this.contactProfilePic = contacto.profilePicUrl || null;
+            
             // Marcar mensajes de este número como leídos
             try {
-                const numero = contacto.numero.replace('@s.whatsapp.net', '').replace('@c.us', '');
+                const numero = contacto.numero.replace('@s.whatsapp.net', '').replace('@c.us', '').replace('@lid', '');
                 await apiService.markMessagesAsRead(numero);
                 await this.loadContactos();
             } catch (e) {
@@ -809,13 +901,35 @@ const Dashboard = {
             }
             await this.loadContactTags();
             await this.loadMessages();
-            // En móviles, el panel de contactos se oculta automáticamente por CSS
+            
+            // Obtener foto de perfil de WhatsApp (en background, no bloquea)
+            this.fetchProfilePic(contacto);
+        },
+        async fetchProfilePic(contacto) {
+            try {
+                const numero = contacto.numero.replace('@s.whatsapp.net', '').replace('@c.us', '').replace('@lid', '');
+                const result = await apiService.getProfilePicture(numero);
+                if (result.profilePicUrl) {
+                    this.contactProfilePic = result.profilePicUrl;
+                    // Guardar en el contacto para cache en la lista
+                    const idx = this.contactos.findIndex(c => c.id === contacto.id);
+                    if (idx !== -1) {
+                        this.contactos[idx].profilePicUrl = result.profilePicUrl;
+                    }
+                    if (this.selectedContacto && this.selectedContacto.id === contacto.id) {
+                        this.selectedContacto.profilePicUrl = result.profilePicUrl;
+                    }
+                }
+            } catch (error) {
+                console.error('Error al obtener foto de perfil:', error);
+            }
         },
         isMobile() {
             return window.innerWidth <= 768;
         },
         goBackToContacts() {
             this.selectedContacto = null;
+            this.contactProfilePic = null;
             this.messages = [];
             this.contactTags = [];
             this.tagSelection = [];
@@ -1093,6 +1207,36 @@ const Dashboard = {
                 this.showToast(error.response?.data?.error || 'Error al crear contacto', 'error', '✕');
             }
         },
+        openEditContact() {
+            if (!this.selectedContacto) return;
+            this.editContacto = {
+                id: this.selectedContacto.id,
+                nombre_contacto: this.selectedContacto.nombre_contacto,
+                numero: this.selectedContacto.numero,
+                observacion: this.selectedContacto.observacion || '',
+            };
+            this.showEditContact = true;
+        },
+        async editContactoSubmit() {
+            if (!this.editContacto.id) return;
+            try {
+                await apiService.updateContacto(this.editContacto.id, {
+                    nombre_contacto: this.editContacto.nombre_contacto,
+                    numero: this.editContacto.numero,
+                    observacion: this.editContacto.observacion,
+                    updated_by: this.user?.id,
+                });
+                this.showEditContact = false;
+                // Actualizar el contacto seleccionado y la lista
+                this.selectedContacto.nombre_contacto = this.editContacto.nombre_contacto;
+                this.selectedContacto.numero = this.editContacto.numero;
+                this.selectedContacto.observacion = this.editContacto.observacion;
+                await this.loadContactos();
+                this.showToast('Contacto actualizado', 'success', '✓');
+            } catch (error) {
+                this.showToast(error.response?.data?.error || 'Error al actualizar contacto', 'error', '✕');
+            }
+        },
         formatTime(timestamp) {
             const date = new Date(timestamp);
             return date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
@@ -1108,72 +1252,91 @@ const Dashboard = {
             window.open(mediaPath, '_blank');
         },
         logout() {
-            this.showUserMenu = false; // Cerrar menú antes de cerrar sesión
+            this.showUserMenu = false;
             localStorage.removeItem('user');
             localStorage.removeItem('apiKey');
             this.$router.push('/login');
+        },
+        async logoutWhatsApp() {
+            this.showUserMenu = false;
+            if (!confirm('¿Deseas desconectar WhatsApp? Tendras que escanear un nuevo codigo QR para reconectar.')) {
+                return;
+            }
+            this.waLoggingOut = true;
+            this.showQRModal = true;
+            this.qrCode = null;
+            this.qrDataUrl = null;
+            try {
+                await apiService.logoutWhatsApp();
+                this.isWhatsAppConnected = false;
+                this.showToast('Sesion de WhatsApp cerrada. Esperando nuevo QR...', 'info', '📴');
+            } catch (error) {
+                console.error('Error al cerrar sesion de WhatsApp:', error);
+                this.showToast('Error al cerrar sesion de WhatsApp', 'error');
+                this.waLoggingOut = false;
+            }
         },
     },
 };
 
 // Componente de listado de contactos del usuario
+// Shared admin header template
+const adminHeaderTemplate = `
+    <header class="dashboard-header">
+        <div class="header-left">
+            <div class="header-logo"><h1>W<span class="logo-text">hatssy</span></h1></div>
+            <nav class="dashboard-nav">
+                <router-link to="/dashboard" class="nav-link" active-class="active">
+                    <span class="nav-icon">&#128172;</span>
+                    <span class="nav-label">Chat</span>
+                </router-link>
+                <div class="nav-dropdown">
+                    <button type="button" class="nav-dropdown-toggle" @click="showMainMenu = !showMainMenu">
+                        <span class="nav-icon">&#9881;</span>
+                        <span class="nav-label">Admin</span>
+                        <span class="nav-caret">&#9662;</span>
+                    </button>
+                    <div v-if="showMainMenu" class="nav-dropdown-menu">
+                        <router-link to="/mis-contactos" class="nav-dropdown-item" @click.native="showMainMenu = false">Contactos</router-link>
+                        <router-link to="/estados-usuario" class="nav-dropdown-item" @click.native="showMainMenu = false">Estados</router-link>
+                        <router-link to="/etiquetas" class="nav-dropdown-item" @click.native="showMainMenu = false">Etiquetas</router-link>
+                        <router-link to="/supervision" class="nav-dropdown-item" @click.native="showMainMenu = false">Supervision</router-link>
+                    </div>
+                </div>
+            </nav>
+        </div>
+        <div class="header-right">
+            <button class="theme-toggle" @click="toggleDarkMode" :title="darkMode ? 'Modo claro' : 'Modo oscuro'">
+                {{ darkMode ? '&#9788;' : '&#9790;' }}
+            </button>
+            <div class="user-menu-toggle" @click="showUserMenu = !showUserMenu">
+                <span class="user-avatar-sm">{{ user?.nombre?.charAt(0)?.toUpperCase() || 'U' }}</span>
+                <span class="user-name-label">{{ user?.nombre }}</span>
+            </div>
+            <div v-if="showUserMenu" class="user-menu-dropdown">
+                <div class="user-menu-header">
+                    <span class="user-avatar-menu">{{ user?.nombre?.charAt(0)?.toUpperCase() || 'U' }}</span>
+                    <div>
+                        <div class="user-menu-name">{{ user?.nombre }}</div>
+                        <div class="user-menu-email">{{ user?.correo }}</div>
+                    </div>
+                </div>
+                <div class="user-menu-divider"></div>
+                <button @click="logout" class="nav-dropdown-item" style="width:100%;text-align:left;border:none;background:none;cursor:pointer;">Cerrar sesion</button>
+            </div>
+        </div>
+    </header>
+`;
+
 const ContactList = {
     template: `
         <div class="dashboard">
-            <header class="dashboard-header">
-                <h1>Whatssy</h1>
-                <nav class="dashboard-nav">
-                    <router-link to="/dashboard" class="nav-link" active-class="active">Chat</router-link>
-                    <div v-if="isAdmin" class="nav-dropdown">
-                        <button
-                            type="button"
-                            class="nav-dropdown-toggle"
-                            @click="showMainMenu = !showMainMenu"
-                        >
-                            Panel admin ▾
-                        </button>
-                        <div v-if="showMainMenu" class="nav-dropdown-menu">
-                            <router-link
-                                to="/mis-contactos"
-                                class="nav-dropdown-item"
-                                @click.native="showMainMenu = false"
-                            >
-                                Mis contactos
-                            </router-link>
-                            <router-link
-                                to="/estados-usuario"
-                                class="nav-dropdown-item"
-                                @click.native="showMainMenu = false"
-                            >
-                                Estados usuario
-                            </router-link>
-                            <router-link
-                                to="/etiquetas"
-                                class="nav-dropdown-item"
-                                @click.native="showMainMenu = false"
-                            >
-                                Etiquetas
-                            </router-link>
-                            <router-link
-                                to="/supervision"
-                                class="nav-dropdown-item"
-                                @click.native="showMainMenu = false"
-                            >
-                                Supervisión
-                            </router-link>
-                        </div>
-                    </div>
-                </nav>
-                <div class="user-info">
-                    <span>{{ user?.nombre }}</span>
-                    <button @click="logout" class="btn-logout">Cerrar Sesión</button>
-                </div>
-            </header>
+            ${adminHeaderTemplate}
 
             <div class="dashboard-content contact-list-page">
                 <div class="contacts-table-card">
                     <div class="contacts-header">
-                        <h2>Mis contactos</h2>
+                        <h2>Todos los contactos</h2>
                         <div class="contacts-header-actions">
                             <button @click="openAddModal" class="btn btn-success btn-sm">+ Nuevo</button>
                             <button @click="loadContactos" class="btn btn-outline-secondary btn-sm">Recargar</button>
@@ -1187,18 +1350,26 @@ const ContactList = {
                             class="search-input"
                         />
                     </div>
-                    <table class="contacts-table" v-if="filteredContactos.length">
+                    <!-- Desktop: tabla -->
+                    <table class="contacts-table desktop-only" v-if="filteredContactos.length">
                         <thead>
                             <tr>
+                                <th style="width: 50px;"></th>
                                 <th>Nombre</th>
-                                <th>Número</th>
-                                <th>Observación</th>
+                                <th>Numero</th>
+                                <th>Observacion</th>
                                 <th>Creado</th>
-                                <th style="width: 140px;">Acciones</th>
+                                <th style="width: 160px;">Acciones</th>
                             </tr>
                         </thead>
                         <tbody>
                             <tr v-for="c in filteredContactos" :key="c.id">
+                                <td>
+                                    <div class="table-avatar">
+                                        <img v-if="c.profilePicUrl" :src="c.profilePicUrl" alt="" class="avatar-img" />
+                                        <span v-else>{{ c.nombre_contacto.charAt(0).toUpperCase() }}</span>
+                                    </div>
+                                </td>
                                 <td>{{ c.nombre_contacto }}</td>
                                 <td>{{ c.numero }}</td>
                                 <td>{{ c.observacion || '-' }}</td>
@@ -1210,8 +1381,31 @@ const ContactList = {
                             </tr>
                         </tbody>
                     </table>
-                    <div v-else class="empty-state">
-                        No tienes contactos asignados todavía.
+                    <!-- Mobile: cards -->
+                    <div class="contacts-cards mobile-only" v-if="filteredContactos.length">
+                        <div class="contact-card" v-for="c in filteredContactos" :key="'card-' + c.id">
+                            <div class="contact-card-header">
+                                <div class="table-avatar">
+                                    <img v-if="c.profilePicUrl" :src="c.profilePicUrl" alt="" class="avatar-img" />
+                                    <span v-else>{{ c.nombre_contacto.charAt(0).toUpperCase() }}</span>
+                                </div>
+                                <div class="contact-card-info">
+                                    <div class="contact-card-name">{{ c.nombre_contacto }}</div>
+                                    <div class="contact-card-number">{{ c.numero }}</div>
+                                </div>
+                            </div>
+                            <div class="contact-card-obs" v-if="c.observacion">{{ c.observacion }}</div>
+                            <div class="contact-card-footer">
+                                <span class="contact-card-date">{{ formatDate(c.created_at) }}</span>
+                                <div class="contact-card-actions">
+                                    <button class="btn btn-outline-primary btn-small" @click="openEditModal(c)">Editar</button>
+                                    <button class="btn btn-danger btn-small ms-1" @click="deleteContactoConfirm(c)">Eliminar</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div v-if="!filteredContactos.length" class="empty-state">
+                        No hay contactos registrados.
                     </div>
                 </div>
             </div>
@@ -1283,6 +1477,8 @@ const ContactList = {
                 observacion: '',
             },
             showMainMenu: false,
+            darkMode: localStorage.getItem('darkMode') === 'true',
+            showUserMenu: false,
         };
     },
     computed: {
@@ -1301,6 +1497,7 @@ const ContactList = {
         },
     },
     async mounted() {
+        this.applyDarkMode();
         const userStr = localStorage.getItem('user');
         if (userStr) {
             this.user = JSON.parse(userStr);
@@ -1308,6 +1505,14 @@ const ContactList = {
         await Promise.all([this.loadStatuses(), this.loadContactos()]);
     },
     methods: {
+        toggleDarkMode() {
+            this.darkMode = !this.darkMode;
+            localStorage.setItem('darkMode', this.darkMode);
+            this.applyDarkMode();
+        },
+        applyDarkMode() {
+            document.body.classList.toggle('dark-mode', this.darkMode);
+        },
         async loadStatuses() {
             try {
                 const response = await apiService.getUserStatuses();
@@ -1321,13 +1526,29 @@ const ContactList = {
             try {
                 this.loading = true;
                 const response = await apiService.getContactos(this.user.id);
-                this.contactos = response.contactos || [];
+                const contactos = response.contactos || [];
+                // Initialize profilePicUrl for reactivity
+                contactos.forEach(c => { c.profilePicUrl = c.profilePicUrl || null; });
+                this.contactos = contactos;
+                // Fetch profile pics in background
+                this.contactos.forEach(c => {
+                    this.fetchProfilePic(c);
+                });
             } catch (error) {
                 console.error('Error al cargar contactos:', error);
                 alert('Error al cargar tus contactos');
             } finally {
                 this.loading = false;
             }
+        },
+        async fetchProfilePic(contacto) {
+            try {
+                const numero = contacto.numero.replace('@s.whatsapp.net', '').replace('@c.us', '').replace('@lid', '');
+                const result = await apiService.getProfilePicture(numero);
+                if (result.profilePicUrl) {
+                    contacto.profilePicUrl = result.profilePicUrl;
+                }
+            } catch (e) { /* silently ignore */ }
         },
         openAddModal() {
             this.formContacto = {
@@ -1416,55 +1637,7 @@ const ContactList = {
 const UserStatusAdmin = {
     template: `
         <div class="dashboard">
-            <header class="dashboard-header">
-                <h1>Whatssy</h1>
-                <nav class="dashboard-nav">
-                    <router-link to="/dashboard" class="nav-link" active-class="active">Chat</router-link>
-                    <div class="nav-dropdown">
-                        <button
-                            type="button"
-                            class="nav-dropdown-toggle"
-                            @click="showMainMenu = !showMainMenu"
-                        >
-                            Panel admin ▾
-                        </button>
-                        <div v-if="showMainMenu" class="nav-dropdown-menu">
-                            <router-link
-                                to="/mis-contactos"
-                                class="nav-dropdown-item"
-                                @click.native="showMainMenu = false"
-                            >
-                                Mis contactos
-                            </router-link>
-                            <router-link
-                                to="/estados-usuario"
-                                class="nav-dropdown-item"
-                                @click.native="showMainMenu = false"
-                            >
-                                Estados usuario
-                            </router-link>
-                            <router-link
-                                to="/etiquetas"
-                                class="nav-dropdown-item"
-                                @click.native="showMainMenu = false"
-                            >
-                                Etiquetas
-                            </router-link>
-                            <router-link
-                                to="/supervision"
-                                class="nav-dropdown-item"
-                                @click.native="showMainMenu = false"
-                            >
-                                Supervisión
-                            </router-link>
-                        </div>
-                    </div>
-                </nav>
-                <div class="user-info">
-                    <span>{{ user?.nombre }}</span>
-                    <button @click="logout" class="btn btn-outline-light btn-sm">Cerrar Sesión</button>
-                </div>
-            </header>
+            ${adminHeaderTemplate}
 
             <div class="dashboard-content contact-list-page">
                 <div class="contacts-table-card">
@@ -1476,11 +1649,11 @@ const UserStatusAdmin = {
                         </div>
                     </div>
 
-                    <table class="contacts-table" v-if="statuses.length">
+                    <table class="contacts-table desktop-only" v-if="statuses.length">
                         <thead>
                             <tr>
                                 <th>Nombre</th>
-                                <th>Código</th>
+                                <th>Codigo</th>
                                 <th>Color</th>
                                 <th>Activo</th>
                                 <th style="width: 140px;">Acciones</th>
@@ -1489,14 +1662,11 @@ const UserStatusAdmin = {
                         <tbody>
                             <tr v-for="s in statuses" :key="s.id">
                                 <td>{{ s.nombre }}</td>
-                                <td>{{ s.codigo }}</td>
+                                <td><code class="code-badge">{{ s.codigo }}</code></td>
                                 <td>
-                                    <span
-                                        v-if="s.color"
-                                        :style="{ backgroundColor: s.color, display: 'inline-block', width: '18px', height: '18px', borderRadius: '999px', border: '1px solid #e5e7eb' }"
-                                    ></span>
+                                    <span v-if="s.color" class="color-swatch" :style="{ backgroundColor: s.color }"></span>
                                 </td>
-                                <td>{{ s.activo ? 'Sí' : 'No' }}</td>
+                                <td><span :class="['status-badge', s.activo ? 'active' : 'inactive']">{{ s.activo ? 'Activo' : 'Inactivo' }}</span></td>
                                 <td>
                                     <button class="btn btn-outline-primary btn-small" @click="openEditModal(s)">Editar</button>
                                     <button class="btn btn-danger btn-small ms-1" @click="deleteStatusConfirm(s)">Eliminar</button>
@@ -1504,7 +1674,26 @@ const UserStatusAdmin = {
                             </tr>
                         </tbody>
                     </table>
-                    <div v-else class="empty-state">
+                    <div class="contacts-cards mobile-only" v-if="statuses.length">
+                        <div class="contact-card" v-for="s in statuses" :key="'card-' + s.id">
+                            <div class="contact-card-header">
+                                <span v-if="s.color" class="color-swatch-lg" :style="{ backgroundColor: s.color }"></span>
+                                <div class="contact-card-info">
+                                    <div class="contact-card-name">{{ s.nombre }}</div>
+                                    <div class="contact-card-number"><code class="code-badge">{{ s.codigo }}</code></div>
+                                </div>
+                                <span :class="['status-badge', s.activo ? 'active' : 'inactive']">{{ s.activo ? 'Activo' : 'Inactivo' }}</span>
+                            </div>
+                            <div class="contact-card-obs" v-if="s.descripcion">{{ s.descripcion }}</div>
+                            <div class="contact-card-footer">
+                                <div class="contact-card-actions">
+                                    <button class="btn btn-outline-primary btn-small" @click="openEditModal(s)">Editar</button>
+                                    <button class="btn btn-danger btn-small ms-1" @click="deleteStatusConfirm(s)">Eliminar</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div v-if="!statuses.length" class="empty-state">
                         No hay estados configurados.
                     </div>
                 </div>
@@ -1561,9 +1750,12 @@ const UserStatusAdmin = {
                 activo: true,
             },
             showMainMenu: false,
+            darkMode: localStorage.getItem('darkMode') === 'true',
+            showUserMenu: false,
         };
     },
     async mounted() {
+        this.applyDarkMode();
         const userStr = localStorage.getItem('user');
         if (userStr) {
             this.user = JSON.parse(userStr);
@@ -1571,6 +1763,8 @@ const UserStatusAdmin = {
         await this.loadStatuses();
     },
     methods: {
+        toggleDarkMode() { this.darkMode = !this.darkMode; localStorage.setItem('darkMode', this.darkMode); this.applyDarkMode(); },
+        applyDarkMode() { document.body.classList.toggle('dark-mode', this.darkMode); },
         async loadStatuses() {
             try {
                 const response = await apiService.getUserStatuses();
@@ -1657,19 +1851,7 @@ const UserStatusAdmin = {
 const TagAdmin = {
     template: `
         <div class="dashboard">
-            <header class="dashboard-header">
-                <h1>Whatssy</h1>
-                <nav class="dashboard-nav">
-                    <router-link to="/dashboard" class="nav-link" active-class="active">Chat</router-link>
-                    <router-link to="/mis-contactos" class="nav-link" active-class="active">Mis contactos</router-link>
-                    <router-link to="/estados-usuario" class="nav-link" active-class="active">Estados usuario</router-link>
-                    <router-link to="/etiquetas" class="nav-link" active-class="active">Etiquetas</router-link>
-                </nav>
-                <div class="user-info">
-                    <span>{{ user?.nombre }}</span>
-                    <button @click="logout" class="btn btn-outline-light btn-sm">Cerrar Sesión</button>
-                </div>
-            </header>
+            ${adminHeaderTemplate}
 
             <div class="dashboard-content contact-list-page">
                 <div class="contacts-table-card">
@@ -1681,25 +1863,22 @@ const TagAdmin = {
                         </div>
                     </div>
 
-                    <table class="contacts-table" v-if="etiquetas.length">
+                    <table class="contacts-table desktop-only" v-if="etiquetas.length">
                         <thead>
                             <tr>
-                                <th>Nombre</th>
                                 <th>Color</th>
+                                <th>Nombre</th>
+                                <th>Descripcion</th>
                                 <th>Activo</th>
                                 <th style="width: 140px;">Acciones</th>
                             </tr>
                         </thead>
                         <tbody>
                             <tr v-for="t in etiquetas" :key="t.id">
-                                <td>{{ t.nombre }}</td>
-                                <td>
-                                    <span
-                                        v-if="t.color"
-                                        :style="{ backgroundColor: t.color, display: 'inline-block', width: '18px', height: '18px', borderRadius: '999px', border: '1px solid #e5e7eb' }"
-                                    ></span>
-                                </td>
-                                <td>{{ t.activo ? 'Sí' : 'No' }}</td>
+                                <td><span v-if="t.color" class="color-swatch" :style="{ backgroundColor: t.color }"></span></td>
+                                <td><strong>{{ t.nombre }}</strong></td>
+                                <td class="text-muted">{{ t.descripcion || '-' }}</td>
+                                <td><span :class="['status-badge', t.activo ? 'active' : 'inactive']">{{ t.activo ? 'Activa' : 'Inactiva' }}</span></td>
                                 <td>
                                     <button class="btn btn-outline-primary btn-small" @click="openEditModal(t)">Editar</button>
                                     <button class="btn btn-danger btn-small ms-1" @click="deleteEtiquetaConfirm(t)">Eliminar</button>
@@ -1707,7 +1886,25 @@ const TagAdmin = {
                             </tr>
                         </tbody>
                     </table>
-                    <div v-else class="empty-state">
+                    <div class="contacts-cards mobile-only" v-if="etiquetas.length">
+                        <div class="contact-card" v-for="t in etiquetas" :key="'card-' + t.id">
+                            <div class="contact-card-header">
+                                <span v-if="t.color" class="color-swatch-lg" :style="{ backgroundColor: t.color }"></span>
+                                <div class="contact-card-info">
+                                    <div class="contact-card-name">{{ t.nombre }}</div>
+                                    <div class="contact-card-number text-muted">{{ t.descripcion || 'Sin descripcion' }}</div>
+                                </div>
+                                <span :class="['status-badge', t.activo ? 'active' : 'inactive']">{{ t.activo ? 'Activa' : 'Inactiva' }}</span>
+                            </div>
+                            <div class="contact-card-footer">
+                                <div class="contact-card-actions">
+                                    <button class="btn btn-outline-primary btn-small" @click="openEditModal(t)">Editar</button>
+                                    <button class="btn btn-danger btn-small ms-1" @click="deleteEtiquetaConfirm(t)">Eliminar</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div v-if="!etiquetas.length" class="empty-state">
                         No hay etiquetas configuradas.
                     </div>
                 </div>
@@ -1759,9 +1956,12 @@ const TagAdmin = {
                 activo: true,
             },
             showMainMenu: false,
+            darkMode: localStorage.getItem('darkMode') === 'true',
+            showUserMenu: false,
         };
     },
     async mounted() {
+        this.applyDarkMode();
         const userStr = localStorage.getItem('user');
         if (userStr) {
             this.user = JSON.parse(userStr);
@@ -1769,6 +1969,8 @@ const TagAdmin = {
         await this.loadEtiquetas();
     },
     methods: {
+        toggleDarkMode() { this.darkMode = !this.darkMode; localStorage.setItem('darkMode', this.darkMode); this.applyDarkMode(); },
+        applyDarkMode() { document.body.classList.toggle('dark-mode', this.darkMode); },
         async loadEtiquetas() {
             try {
                 const response = await apiService.getEtiquetas();
@@ -1849,62 +2051,14 @@ const TagAdmin = {
 const Supervision = {
     template: `
         <div class="dashboard">
-            <header class="dashboard-header">
-                <h1>WhatsApp Web API</h1>
-                <nav class="dashboard-nav">
-                    <router-link to="/dashboard" class="nav-link" active-class="active">Chat</router-link>
-                    <div class="nav-dropdown">
-                        <button
-                            type="button"
-                            class="nav-dropdown-toggle"
-                            @click="showMainMenu = !showMainMenu"
-                        >
-                            Panel admin ▾
-                        </button>
-                        <div v-if="showMainMenu" class="nav-dropdown-menu">
-                            <router-link
-                                to="/mis-contactos"
-                                class="nav-dropdown-item"
-                                @click.native="showMainMenu = false"
-                            >
-                                Mis contactos
-                            </router-link>
-                            <router-link
-                                to="/estados-usuario"
-                                class="nav-dropdown-item"
-                                @click.native="showMainMenu = false"
-                            >
-                                Estados usuario
-                            </router-link>
-                            <router-link
-                                to="/etiquetas"
-                                class="nav-dropdown-item"
-                                @click.native="showMainMenu = false"
-                            >
-                                Etiquetas
-                            </router-link>
-                            <router-link
-                                to="/supervision"
-                                class="nav-dropdown-item"
-                                @click.native="showMainMenu = false"
-                            >
-                                Supervisión
-                            </router-link>
-                        </div>
-                    </div>
-                </nav>
-                <div class="user-info">
-                    <span>{{ user?.nombre }}</span>
-                    <button @click="logout" class="btn btn-outline-light btn-sm">Cerrar Sesión</button>
-                </div>
-            </header>
+            ${adminHeaderTemplate}
 
             <div class="dashboard-content contact-list-page">
                 <div class="contacts-table-card">
                     <div class="contacts-header">
-                        <h2>Panel de supervisión</h2>
+                        <h2>Supervision</h2>
                         <div class="contacts-header-actions">
-                            <select v-model="filterStatus" class="form-select form-select-sm" style="width:auto;">
+                            <select v-model="filterStatus" class="filter-select">
                                 <option value="">Todos los estados</option>
                                 <option v-for="s in statusOptions" :key="s.codigo" :value="s.codigo">
                                     {{ s.nombre }}
@@ -1914,70 +2068,98 @@ const Supervision = {
                         </div>
                     </div>
 
-                    <table class="contacts-table" v-if="filteredUsers.length">
+                    <!-- Desktop table -->
+                    <table class="contacts-table desktop-only" v-if="filteredUsers.length">
                         <thead>
                             <tr>
                                 <th>Usuario</th>
                                 <th>Correo</th>
                                 <th>Tipo</th>
                                 <th>Estado</th>
-                                <th>Mensajes sin leer</th>
-                                <th>Contactos con envío</th>
+                                <th>Sin leer</th>
+                                <th>Enviados</th>
                             </tr>
                         </thead>
                         <tbody>
                             <tr v-for="u in filteredUsers" :key="u.id">
-                                <td>{{ u.nombre }}</td>
-                                <td>{{ u.correo }}</td>
-                                <td>{{ u.user_type === 1 ? 'Admin' : 'Usuario' }}</td>
+                                <td><strong>{{ u.nombre }}</strong></td>
+                                <td class="text-muted">{{ u.correo }}</td>
+                                <td><span :class="['role-badge', u.user_type === 1 ? 'admin' : 'user']">{{ u.user_type === 1 ? 'Admin' : 'Usuario' }}</span></td>
                                 <td>
                                     <div v-if="u.status_nombre" class="status-cell">
-                                        <span
-                                            class="status-dot"
-                                            :style="{ backgroundColor: getStatusColor(u) }"
-                                        ></span>
+                                        <span class="status-dot" :style="{ backgroundColor: getStatusColor(u) }"></span>
                                         <span>{{ u.status_nombre }}</span>
                                     </div>
                                     <span v-else class="text-muted">Sin estado</span>
                                 </td>
                                 <td>
-                                    <button
-                                        v-if="u.unread_messages > 0"
-                                        type="button"
-                                        class="btn btn-outline-primary btn-sm"
-                                        @click="loadUnreadContacts(u)"
-                                    >
+                                    <button v-if="u.unread_messages > 0" type="button" class="unread-badge" @click="loadUnreadContacts(u)">
                                         {{ u.unread_messages }}
                                     </button>
-                                    <span v-else>0</span>
+                                    <span v-else class="text-muted">0</span>
                                 </td>
                                 <td>{{ u.sent_contacts }}</td>
                             </tr>
                         </tbody>
                     </table>
-                    <div v-else class="empty-state">
+
+                    <!-- Mobile cards -->
+                    <div class="contacts-cards mobile-only" v-if="filteredUsers.length">
+                        <div class="contact-card supervision-card" v-for="u in filteredUsers" :key="'card-' + u.id">
+                            <div class="contact-card-header">
+                                <span class="user-avatar-sm">{{ u.nombre?.charAt(0)?.toUpperCase() || 'U' }}</span>
+                                <div class="contact-card-info">
+                                    <div class="contact-card-name">{{ u.nombre }}</div>
+                                    <div class="contact-card-number text-muted">{{ u.correo }}</div>
+                                </div>
+                                <span :class="['role-badge', u.user_type === 1 ? 'admin' : 'user']">{{ u.user_type === 1 ? 'Admin' : 'Usuario' }}</span>
+                            </div>
+                            <div class="supervision-card-stats">
+                                <div class="stat-item">
+                                    <div v-if="u.status_nombre" class="status-cell">
+                                        <span class="status-dot" :style="{ backgroundColor: getStatusColor(u) }"></span>
+                                        <span>{{ u.status_nombre }}</span>
+                                    </div>
+                                    <span v-else class="text-muted">Sin estado</span>
+                                </div>
+                                <div class="stat-item">
+                                    <span class="stat-label">Sin leer</span>
+                                    <button v-if="u.unread_messages > 0" type="button" class="unread-badge" @click="loadUnreadContacts(u)">
+                                        {{ u.unread_messages }}
+                                    </button>
+                                    <span v-else class="text-muted">0</span>
+                                </div>
+                                <div class="stat-item">
+                                    <span class="stat-label">Enviados</span>
+                                    <span>{{ u.sent_contacts }}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div v-if="!filteredUsers.length" class="empty-state">
                         No hay usuarios para mostrar.
                     </div>
 
-                    <div v-if="unreadContacts.length" style="margin-top: 1.5rem;">
-                        <h3 style="font-size: 1rem; margin-bottom: 0.75rem;">
-                            Contactos con mensajes sin leer de {{ selectedUserName }}
+                    <div v-if="unreadContacts.length" class="unread-section">
+                        <h3 class="unread-section-title">
+                            Contactos sin leer de {{ selectedUserName }}
                         </h3>
                         <table class="contacts-table">
                             <thead>
                                 <tr>
-                                    <th>Nombre contacto</th>
-                                    <th>Número</th>
-                                    <th>Mensajes sin leer</th>
-                                    <th>Último mensaje</th>
+                                    <th>Contacto</th>
+                                    <th>Numero</th>
+                                    <th>Sin leer</th>
+                                    <th>Ultimo mensaje</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <tr v-for="c in unreadContacts" :key="c.contacto_id">
-                                    <td>{{ c.nombre_contacto }}</td>
-                                    <td>{{ c.numero }}</td>
-                                    <td>{{ c.unread_count }}</td>
-                                    <td>{{ c.last_message || '-' }}</td>
+                                    <td><strong>{{ c.nombre_contacto }}</strong></td>
+                                    <td class="text-muted">{{ c.numero }}</td>
+                                    <td><span class="unread-badge">{{ c.unread_count }}</span></td>
+                                    <td class="text-muted">{{ c.last_message || '-' }}</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -1993,6 +2175,8 @@ const Supervision = {
             filterStatus: '',
             statusOptions: [],
             showMainMenu: false,
+            darkMode: localStorage.getItem('darkMode') === 'true',
+            showUserMenu: false,
             unreadContacts: [],
             selectedUserName: '',
         };
@@ -2004,6 +2188,7 @@ const Supervision = {
         },
     },
     async mounted() {
+        this.applyDarkMode();
         const userStr = localStorage.getItem('user');
         if (userStr) {
             this.user = JSON.parse(userStr);
@@ -2011,6 +2196,8 @@ const Supervision = {
         await this.loadData();
     },
     methods: {
+        toggleDarkMode() { this.darkMode = !this.darkMode; localStorage.setItem('darkMode', this.darkMode); this.applyDarkMode(); },
+        applyDarkMode() { document.body.classList.toggle('dark-mode', this.darkMode); },
         async loadData() {
             try {
                 const [userRes, statusRes] = await Promise.all([
