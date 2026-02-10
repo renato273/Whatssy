@@ -9,7 +9,7 @@ const {
 const { Boom } = require('@hapi/boom');
 const qrcode = require('qrcode');
 const pino = require('pino');
-const { saveReceivedMessage, saveMessageAck } = require('../database/connection');
+const { saveReceivedMessage, saveMessageAck, ensureContactExists } = require('../database/connection');
 const path = require('path');
 const fs = require('fs');
 const { writeFile } = require('fs').promises;
@@ -185,7 +185,8 @@ async function connectToWhatsApp() {
         });
 
         // Función helper para obtener el número de teléfono desde un JID (maneja LIDs)
-        function getPhoneNumberFromJid(remoteJid, remoteJidAlt = null, participant = null, participantAlt = null) {
+        // NOTA: Es async porque getPNForLID() puede retornar una Promise en Baileys v7
+        async function getPhoneNumberFromJid(remoteJid, remoteJidAlt = null, participant = null, participantAlt = null) {
             // Si tenemos remoteJidAlt (número de teléfono alternativo), usarlo
             if (remoteJidAlt && !remoteJidAlt.includes('@lid')) {
                 return remoteJidAlt;
@@ -200,8 +201,9 @@ async function connectToWhatsApp() {
             try {
                 if (socket && socket.signalRepository && socket.signalRepository.lidMapping) {
                     const lidMapping = socket.signalRepository.lidMapping;
-                    const pn = lidMapping.getPNForLID(remoteJid);
-                    if (pn) {
+                    // getPNForLID puede ser async en Baileys v7+
+                    const pn = await Promise.resolve(lidMapping.getPNForLID(remoteJid));
+                    if (pn && typeof pn === 'string') {
                         return pn;
                     }
                 }
@@ -220,7 +222,6 @@ async function connectToWhatsApp() {
             }
             
             // Si todo falla, devolver el remoteJid original (será un LID)
-            // Esto es aceptable según la documentación: "MIGRATE TO LIDs. PNs are WAY LESS RELIABLE"
             return remoteJid;
         }
 
@@ -233,7 +234,7 @@ async function connectToWhatsApp() {
                 if (message.key.remoteJid === 'status@broadcast') continue;
 
                 // Obtener el número de teléfono correcto (maneja LIDs)
-                const fromNumber = getPhoneNumberFromJid(
+                const fromNumber = await getPhoneNumberFromJid(
                     message.key.remoteJid,
                     message.key.remoteJidAlt,
                     message.key.participant,
@@ -404,6 +405,11 @@ async function connectToWhatsApp() {
                     });
                     console.log(`Mensaje recibido guardado en la base de datos desde: ${fromNumber}`);
 
+                    // Auto-crear contacto si no existe
+                    // Usar pushName de WhatsApp como nombre del contacto
+                    const pushName = message.pushName || null;
+                    const contactResult = await ensureContactExists(fromNumber, pushName);
+                    
                     // Emitir evento de nuevo mensaje recibido a través de Socket.io
                     if (io) {
                         // Normalizar el número para el frontend (sin sufijos)
@@ -412,6 +418,15 @@ async function connectToWhatsApp() {
                             .replace('@c.us', '')
                             .replace('@g.us', '')
                             .replace('@lid', ''); // También remover @lid si queda
+                        
+                        // Si el contacto fue recién creado, notificar al frontend para que actualice la lista
+                        if (contactResult && contactResult.isNew) {
+                            io.emit('contact_created', {
+                                id: contactResult.id,
+                                nombre_contacto: contactResult.nombre_contacto,
+                                numero: contactResult.numero,
+                            });
+                        }
                         
                         io.emit('new_message', {
                             id: message.key.id,
@@ -444,7 +459,7 @@ async function connectToWhatsApp() {
                     const { key, update: { status } } = update;
                     
                     // Obtener el número normalizado para el ACK (maneja LIDs)
-                    const ackFromNumber = getPhoneNumberFromJid(
+                    const ackFromNumber = await getPhoneNumberFromJid(
                         key.remoteJid,
                         key.remoteJidAlt,
                         key.participant,

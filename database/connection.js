@@ -947,6 +947,49 @@ function getContactoByNumero(numero) {
     });
 }
 
+// Auto-crear contacto si no existe para un número dado
+// Retorna el contacto existente o el recién creado
+async function ensureContactExists(numero, pushName = null) {
+    // Normalizar el número
+    const numeroNormalizado = numero
+        .replace('@s.whatsapp.net', '')
+        .replace('@c.us', '')
+        .replace('@lid', '');
+
+    if (!numeroNormalizado) return null;
+
+    try {
+        // Verificar si ya existe un contacto con este número
+        const existing = await getContactoByNumero(numeroNormalizado);
+        if (existing) return existing;
+
+        // No existe, crear contacto automáticamente
+        // Formatear nombre: usar pushName de WhatsApp si está disponible, sino el número
+        const nombreContacto = pushName || numeroNormalizado;
+
+        const result = await createContacto({
+            nombreContacto,
+            numero: numeroNormalizado,
+            observacion: pushName ? `Auto-registrado (${pushName})` : 'Auto-registrado',
+            createdBy: null, // Creado por el sistema
+            userId: null,    // Visible para todos los usuarios
+        });
+
+        console.log(`📇 Contacto auto-creado: ${nombreContacto} (${numeroNormalizado})`);
+
+        return {
+            id: result.id,
+            nombre_contacto: nombreContacto,
+            numero: numeroNormalizado,
+            observacion: pushName ? `Auto-registrado (${pushName})` : 'Auto-registrado',
+            isNew: true, // Flag para indicar que fue recién creado
+        };
+    } catch (error) {
+        console.error('Error al auto-crear contacto:', error);
+        return null;
+    }
+}
+
 function getAllContactos(userId = null) {
     return new Promise((resolve, reject) => {
         if (!db) {
@@ -982,11 +1025,8 @@ function getAllContactos(userId = null) {
 
         const params = [];
 
-        // Si se pasa userId, filtrar por contactos del usuario
-        if (userId) {
-            sql += ` WHERE c.user_id = ? OR c.created_by = ?`;
-            params.push(userId, userId);
-        }
+        // En un sistema de WhatsApp compartido, todos los usuarios ven todos los contactos
+        // El user_id se usa para saber quién creó/gestiona el contacto, no para restringir visibilidad
 
         sql += ` ORDER BY c.created_at DESC`;
 
@@ -1396,8 +1436,8 @@ function saveMessageAck({ messageId, ackStatus, fromNumber, timestamp }) {
             let sentMessageId = existingAck ? existingAck.sent_message_id : null;
 
             // Si no encontramos un match previo, intentar buscar por número (método menos preciso)
-            if (!sentMessageId && fromNumber) {
-                const numeroNormalizado = fromNumber.replace('@s.whatsapp.net', '').replace('@c.us', '');
+            if (!sentMessageId && fromNumber && typeof fromNumber === 'string') {
+                const numeroNormalizado = fromNumber.replace('@s.whatsapp.net', '').replace('@c.us', '').replace('@lid', '');
                 const findSentMessageQuery = `SELECT id FROM sent_messages WHERE numero_destino = ? ORDER BY created_at DESC LIMIT 1`;
                 
                 db.get(findSentMessageQuery, [numeroNormalizado], (err, sentMsg) => {
@@ -1540,6 +1580,7 @@ module.exports = {
     createContacto,
     getContactoById,
     getContactoByNumero,
+    ensureContactExists,
     getAllContactos,
     updateContacto,
     deleteContacto,

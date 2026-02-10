@@ -598,20 +598,42 @@ const Dashboard = {
             }
         });
 
+        // Escuchar nuevos contactos auto-creados
+        this.socket.on('contact_created', (contact) => {
+            console.log('📇 Nuevo contacto auto-creado:', contact.nombre_contacto, contact.numero);
+            // Recargar la lista de contactos para incluir el nuevo
+            this.loadContactos();
+            this.showToast(`Nuevo contacto: ${contact.nombre_contacto}`, 'info', '📇');
+        });
+
         // Escuchar nuevos mensajes
         this.socket.on('new_message', (message) => {
-            // Normalizar número del mensaje
-            const messageNumero = message.numero || message.numeroCompleto?.replace('@s.whatsapp.net', '').replace('@c.us', '') || '';
+            console.log('📩 new_message recibido:', JSON.stringify({
+                id: message.id,
+                numero: message.numero,
+                body: message.body?.substring(0, 50),
+                type: message.type,
+                timestamp: message.timestamp
+            }));
+            
+            // Normalizar número del mensaje (limpiar todos los sufijos posibles)
+            const messageNumero = (message.numero || message.numeroCompleto?.replace('@s.whatsapp.net', '').replace('@c.us', '').replace('@lid', '') || '').replace('@s.whatsapp.net', '').replace('@c.us', '').replace('@lid', '');
             
             // Buscar el contacto correspondiente
             const contacto = this.contactos.find(c => {
-                const num = c.numero.replace('@s.whatsapp.net', '').replace('@c.us', '');
+                const num = c.numero.replace('@s.whatsapp.net', '').replace('@c.us', '').replace('@lid', '');
                 return num === messageNumero;
             });
             
+            console.log('📩 Contacto encontrado:', contacto?.nombre_contacto || 'NO ENCONTRADO', '| Seleccionado:', this.selectedContacto?.nombre_contacto || 'NINGUNO');
+            
+            // Normalizar número del contacto seleccionado (si hay uno)
+            const numeroNormalizado = this.selectedContacto 
+                ? this.selectedContacto.numero.replace('@s.whatsapp.net', '').replace('@c.us', '').replace('@lid', '') 
+                : '';
+            
             // Si el contacto está seleccionado, agregar el mensaje al chat
             if (this.selectedContacto) {
-                const numeroNormalizado = this.selectedContacto.numero.replace('@s.whatsapp.net', '').replace('@c.us', '');
                 
                 if (numeroNormalizado === messageNumero) {
                     // Verificar si el mensaje ya existe (evitar duplicados)
@@ -649,33 +671,17 @@ const Dashboard = {
                 }
             }
             
-            // Mostrar notificación toast si el contacto NO está seleccionado o si no hay contacto seleccionado
-            if (!this.selectedContacto || (this.selectedContacto && this.selectedContacto.numero.replace('@s.whatsapp.net', '').replace('@c.us', '') !== messageNumero)) {
-                const contactoNombre = contacto?.nombre_contacto || messageNumero || 'Desconocido';
-                const mensajePreview = message.body || '[Mensaje multimedia]';
-                const preview = mensajePreview.length > 50 ? mensajePreview.substring(0, 50) + '...' : mensajePreview;
-                
-                this.showToast(`${contactoNombre}: ${preview}`, 'info', '💬');
-            }
-            
             // Recargar contactos para actualizar contador de no leídos
             this.loadContactos();
 
             // Mostrar toast y notificación del navegador para mensajes recibidos
             if (message.type === 'received') {
-                // Buscar el contacto para obtener su nombre
-                const contacto = this.contactos.find(c => {
-                    const num = c.numero.replace('@s.whatsapp.net', '').replace('@c.us', '');
-                    const msgNum = message.numero || message.numeroCompleto?.replace('@s.whatsapp.net', '').replace('@c.us', '') || '';
-                    return num === msgNum;
-                });
-                
-                const contactoNombre = contacto?.nombre_contacto || message.numero || 'Desconocido';
+                const contactoNombre = contacto?.nombre_contacto || messageNumero || 'Desconocido';
                 const mensajePreview = message.body || '[Mensaje multimedia]';
                 const preview = mensajePreview.length > 50 ? mensajePreview.substring(0, 50) + '...' : mensajePreview;
                 
-                // Mostrar toast solo si el contacto no está seleccionado o si no hay contacto seleccionado
-                if (!this.selectedContacto || (this.selectedContacto && this.selectedContacto.numero.replace('@s.whatsapp.net', '').replace('@c.us', '') !== (message.numero || message.numeroCompleto?.replace('@s.whatsapp.net', '').replace('@c.us', '')))) {
+                // Mostrar toast solo si el contacto no está seleccionado actualmente
+                if (!this.selectedContacto || numeroNormalizado !== messageNumero) {
                     this.showToast(`${contactoNombre}: ${preview}`, 'info', '💬');
                 }
                 
@@ -818,9 +824,19 @@ const Dashboard = {
             if (!this.selectedContacto) return;
 
             try {
-                const numero = this.selectedContacto.numero.replace('@s.whatsapp.net', '').replace('@c.us', '');
+                const numero = this.selectedContacto.numero.replace('@s.whatsapp.net', '').replace('@c.us', '').replace('@lid', '');
                 const response = await apiService.getMessages(numero);
                 let messages = response.messages || [];
+                
+                // Normalizar timestamps: convertir de segundos a milisegundos si es necesario
+                messages.forEach(msg => {
+                    if (msg.timestamp && typeof msg.timestamp === 'number' && msg.timestamp < 1e12) {
+                        // Timestamp en segundos (epoch) → convertir a milisegundos
+                        msg.timestamp = msg.timestamp * 1000;
+                    } else if (!msg.timestamp && msg.created_at) {
+                        msg.timestamp = new Date(msg.created_at).getTime();
+                    }
+                });
                 
                 // Asegurar que los mensajes estén ordenados por timestamp
                 messages.sort((a, b) => {
@@ -853,7 +869,7 @@ const Dashboard = {
             this.newMessage = '';
 
             try {
-                const numero = this.selectedContacto.numero.replace('@s.whatsapp.net', '').replace('@c.us', '');
+                const numero = this.selectedContacto.numero.replace('@s.whatsapp.net', '').replace('@c.us', '').replace('@lid', '');
                 await apiService.sendMessage(numero, mensaje, this.user.id);
                 this.showToast('Mensaje enviado', 'success', '✓');
                 
