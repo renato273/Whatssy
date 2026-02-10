@@ -107,6 +107,9 @@ const Dashboard = {
                                 <router-link to="/mis-contactos" class="nav-dropdown-item" @click.native="showMainMenu = false">
                                     Mis contactos
                                 </router-link>
+                                <router-link to="/usuarios" class="nav-dropdown-item" @click.native="showMainMenu = false">
+                                    Usuarios
+                                </router-link>
                                 <router-link to="/estados-usuario" class="nav-dropdown-item" @click.native="showMainMenu = false">
                                     Estados usuario
                                 </router-link>
@@ -563,6 +566,8 @@ const Dashboard = {
             waLoggingOut: false,
             showUserMenu: false,
             contactProfilePic: null,
+            profilePicCache: {},
+            profilePicFetching: false,
             showEditContact: false,
             editContacto: {
                 id: null,
@@ -612,6 +617,9 @@ const Dashboard = {
     async mounted() {
         // Aplicar modo oscuro si está activado
         this.applyDarkMode();
+        
+        // Cargar cache de fotos de perfil desde localStorage
+        this.loadProfilePicCache();
         
         // Cargar usuario desde localStorage
         const userStr = localStorage.getItem('user');
@@ -878,9 +886,16 @@ const Dashboard = {
             try {
                 const response = await apiService.getContactos(this.user?.id);
                 const contactos = response.contactos || [];
-                // Initialize profilePicUrl for Vue reactivity
-                contactos.forEach(c => { c.profilePicUrl = c.profilePicUrl || null; });
+                // Restore cached profile pictures
+                contactos.forEach(c => {
+                    const key = (c.numero || '').replace('@s.whatsapp.net', '').replace('@c.us', '').replace('@lid', '');
+                    c.profilePicUrl = this.profilePicCache[key] || null;
+                });
                 this.contactos = contactos;
+                // Fetch missing profile pictures in background
+                if (!this.profilePicFetching) {
+                    this.fetchAllProfilePics();
+                }
             } catch (error) {
                 console.error('Error al cargar contactos:', error);
             } finally {
@@ -889,15 +904,16 @@ const Dashboard = {
         },
         async selectContacto(contacto) {
             this.selectedContacto = contacto;
-            this.contactProfilePic = contacto.profilePicUrl || null;
+            const key = (contacto.numero || '').replace('@s.whatsapp.net', '').replace('@c.us', '').replace('@lid', '');
+            this.contactProfilePic = this.profilePicCache[key] || contacto.profilePicUrl || null;
             
             // Marcar mensajes de este número como leídos
             try {
-                const numero = contacto.numero.replace('@s.whatsapp.net', '').replace('@c.us', '').replace('@lid', '');
+                const numero = key;
                 await apiService.markMessagesAsRead(numero);
                 await this.loadContactos();
             } catch (e) {
-                console.error('Error al marcar mensajes como leídos:', e);
+                console.error('Error al marcar mensajes como leidos:', e);
             }
             await this.loadContactTags();
             await this.loadMessages();
@@ -907,22 +923,61 @@ const Dashboard = {
         },
         async fetchProfilePic(contacto) {
             try {
-                const numero = contacto.numero.replace('@s.whatsapp.net', '').replace('@c.us', '').replace('@lid', '');
+                const numero = (contacto.numero || '').replace('@s.whatsapp.net', '').replace('@c.us', '').replace('@lid', '');
+                if (!numero) return;
                 const result = await apiService.getProfilePicture(numero);
                 if (result.profilePicUrl) {
-                    this.contactProfilePic = result.profilePicUrl;
-                    // Guardar en el contacto para cache en la lista
+                    // Save to persistent cache
+                    this.profilePicCache[numero] = result.profilePicUrl;
+                    this.saveProfilePicCache();
+                    // Update contact in list
                     const idx = this.contactos.findIndex(c => c.id === contacto.id);
                     if (idx !== -1) {
                         this.contactos[idx].profilePicUrl = result.profilePicUrl;
                     }
+                    // Update selected contact header
                     if (this.selectedContacto && this.selectedContacto.id === contacto.id) {
+                        this.contactProfilePic = result.profilePicUrl;
                         this.selectedContacto.profilePicUrl = result.profilePicUrl;
                     }
                 }
             } catch (error) {
                 console.error('Error al obtener foto de perfil:', error);
             }
+        },
+        async fetchAllProfilePics() {
+            this.profilePicFetching = true;
+            try {
+                const contactsToFetch = this.contactos.filter(c => {
+                    const key = (c.numero || '').replace('@s.whatsapp.net', '').replace('@c.us', '').replace('@lid', '');
+                    return key && !this.profilePicCache[key];
+                });
+                // Fetch in batches of 3 with delay to avoid rate limiting
+                for (let i = 0; i < contactsToFetch.length; i++) {
+                    const c = contactsToFetch[i];
+                    await this.fetchProfilePic(c);
+                    if (i < contactsToFetch.length - 1) {
+                        await new Promise(r => setTimeout(r, 500));
+                    }
+                }
+            } catch (e) {
+                console.error('Error fetching profile pics:', e);
+            } finally {
+                this.profilePicFetching = false;
+            }
+        },
+        loadProfilePicCache() {
+            try {
+                const cached = localStorage.getItem('profilePicCache');
+                if (cached) {
+                    this.profilePicCache = JSON.parse(cached);
+                }
+            } catch (e) { this.profilePicCache = {}; }
+        },
+        saveProfilePicCache() {
+            try {
+                localStorage.setItem('profilePicCache', JSON.stringify(this.profilePicCache));
+            } catch (e) { /* localStorage full or unavailable */ }
         },
         isMobile() {
             return window.innerWidth <= 768;
@@ -1298,6 +1353,7 @@ const adminHeaderTemplate = `
                     </button>
                     <div v-if="showMainMenu" class="nav-dropdown-menu">
                         <router-link to="/mis-contactos" class="nav-dropdown-item" @click.native="showMainMenu = false">Contactos</router-link>
+                        <router-link to="/usuarios" class="nav-dropdown-item" @click.native="showMainMenu = false">Usuarios</router-link>
                         <router-link to="/estados-usuario" class="nav-dropdown-item" @click.native="showMainMenu = false">Estados</router-link>
                         <router-link to="/etiquetas" class="nav-dropdown-item" @click.native="showMainMenu = false">Etiquetas</router-link>
                         <router-link to="/supervision" class="nav-dropdown-item" @click.native="showMainMenu = false">Supervision</router-link>
@@ -1479,6 +1535,8 @@ const ContactList = {
             showMainMenu: false,
             darkMode: localStorage.getItem('darkMode') === 'true',
             showUserMenu: false,
+            profilePicCache: {},
+            profilePicFetching: false,
         };
     },
     computed: {
@@ -1498,6 +1556,7 @@ const ContactList = {
     },
     async mounted() {
         this.applyDarkMode();
+        this.loadProfilePicCache();
         const userStr = localStorage.getItem('user');
         if (userStr) {
             this.user = JSON.parse(userStr);
@@ -1527,13 +1586,16 @@ const ContactList = {
                 this.loading = true;
                 const response = await apiService.getContactos(this.user.id);
                 const contactos = response.contactos || [];
-                // Initialize profilePicUrl for reactivity
-                contactos.forEach(c => { c.profilePicUrl = c.profilePicUrl || null; });
-                this.contactos = contactos;
-                // Fetch profile pics in background
-                this.contactos.forEach(c => {
-                    this.fetchProfilePic(c);
+                // Restore cached profile pictures
+                contactos.forEach(c => {
+                    const key = (c.numero || '').replace('@s.whatsapp.net', '').replace('@c.us', '').replace('@lid', '');
+                    c.profilePicUrl = this.profilePicCache[key] || null;
                 });
+                this.contactos = contactos;
+                // Fetch missing profile pics in background
+                if (!this.profilePicFetching) {
+                    this.fetchAllProfilePics();
+                }
             } catch (error) {
                 console.error('Error al cargar contactos:', error);
                 alert('Error al cargar tus contactos');
@@ -1543,12 +1605,51 @@ const ContactList = {
         },
         async fetchProfilePic(contacto) {
             try {
-                const numero = contacto.numero.replace('@s.whatsapp.net', '').replace('@c.us', '').replace('@lid', '');
+                const numero = (contacto.numero || '').replace('@s.whatsapp.net', '').replace('@c.us', '').replace('@lid', '');
+                if (!numero) return;
                 const result = await apiService.getProfilePicture(numero);
                 if (result.profilePicUrl) {
-                    contacto.profilePicUrl = result.profilePicUrl;
+                    this.profilePicCache[numero] = result.profilePicUrl;
+                    this.saveProfilePicCache();
+                    const idx = this.contactos.findIndex(c => c.id === contacto.id);
+                    if (idx !== -1) {
+                        this.contactos[idx].profilePicUrl = result.profilePicUrl;
+                    }
                 }
             } catch (e) { /* silently ignore */ }
+        },
+        async fetchAllProfilePics() {
+            this.profilePicFetching = true;
+            try {
+                const contactsToFetch = this.contactos.filter(c => {
+                    const key = (c.numero || '').replace('@s.whatsapp.net', '').replace('@c.us', '').replace('@lid', '');
+                    return key && !this.profilePicCache[key];
+                });
+                for (let i = 0; i < contactsToFetch.length; i++) {
+                    const c = contactsToFetch[i];
+                    await this.fetchProfilePic(c);
+                    if (i < contactsToFetch.length - 1) {
+                        await new Promise(r => setTimeout(r, 500));
+                    }
+                }
+            } catch (e) {
+                console.error('Error fetching profile pics:', e);
+            } finally {
+                this.profilePicFetching = false;
+            }
+        },
+        loadProfilePicCache() {
+            try {
+                const cached = localStorage.getItem('profilePicCache');
+                if (cached) {
+                    this.profilePicCache = JSON.parse(cached);
+                }
+            } catch (e) { this.profilePicCache = {}; }
+        },
+        saveProfilePicCache() {
+            try {
+                localStorage.setItem('profilePicCache', JSON.stringify(this.profilePicCache));
+            } catch (e) { /* localStorage full or unavailable */ }
         },
         openAddModal() {
             this.formContacto = {
@@ -1624,6 +1725,259 @@ const ContactList = {
                 hour: '2-digit',
                 minute: '2-digit',
             });
+        },
+        logout() {
+            localStorage.removeItem('user');
+            localStorage.removeItem('apiKey');
+            this.$router.push('/login');
+        },
+    },
+};
+
+// Componente administración de usuarios (solo admin)
+const UserAdmin = {
+    template: `
+        <div class="dashboard">
+            ${adminHeaderTemplate}
+
+            <div class="dashboard-content contact-list-page">
+                <div class="contacts-table-card">
+                    <div class="contacts-header">
+                        <h2>Administrar usuarios</h2>
+                        <div class="contacts-header-actions">
+                            <button @click="openAddModal" class="btn btn-success btn-sm">+ Nuevo usuario</button>
+                            <button @click="loadUsers" class="btn btn-outline-secondary btn-sm">Recargar</button>
+                        </div>
+                    </div>
+
+                    <table class="contacts-table desktop-only" v-if="users.length">
+                        <thead>
+                            <tr>
+                                <th>Nombre</th>
+                                <th>Correo</th>
+                                <th>Tipo</th>
+                                <th>Estado</th>
+                                <th>Creado</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="u in users" :key="u.id">
+                                <td>{{ u.nombre }}</td>
+                                <td>{{ u.correo }}</td>
+                                <td><span :class="['role-badge', u.user_type === 1 ? 'role-admin' : 'role-user']">{{ u.user_type === 1 ? 'Admin' : 'Usuario' }}</span></td>
+                                <td><span :class="['status-badge', 'status-' + u.estado]">{{ u.estado }}</span></td>
+                                <td>{{ formatDate(u.created_at) }}</td>
+                                <td>
+                                    <button @click="openEditModal(u)" class="btn btn-outline-secondary btn-sm">Editar</button>
+                                    <button v-if="u.id !== user.id" @click="deleteUserConfirm(u)" class="btn btn-outline-secondary btn-sm" style="color:var(--danger);">Eliminar</button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <!-- Vista mobile cards -->
+                    <div class="contacts-cards mobile-only" v-if="users.length">
+                        <div class="contact-card" v-for="u in users" :key="u.id">
+                            <div class="contact-card-header">
+                                <div class="contact-card-avatar">
+                                    <span>{{ u.nombre.charAt(0).toUpperCase() }}</span>
+                                </div>
+                                <div class="contact-card-info">
+                                    <strong>{{ u.nombre }}</strong>
+                                    <small>{{ u.correo }}</small>
+                                </div>
+                            </div>
+                            <div class="contact-card-details" style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0;">
+                                <span :class="['role-badge', u.user_type === 1 ? 'role-admin' : 'role-user']">{{ u.user_type === 1 ? 'Admin' : 'Usuario' }}</span>
+                                <span :class="['status-badge', 'status-' + u.estado]">{{ u.estado }}</span>
+                            </div>
+                            <div class="contact-card-details" style="font-size:0.8rem;color:var(--gray-500);margin-bottom:8px;">
+                                Creado: {{ formatDate(u.created_at) }}
+                            </div>
+                            <div class="contact-card-actions" style="display:flex;gap:6px;">
+                                <button @click="openEditModal(u)" class="btn btn-outline-secondary btn-sm" style="flex:1;">Editar</button>
+                                <button v-if="u.id !== user.id" @click="deleteUserConfirm(u)" class="btn btn-outline-secondary btn-sm" style="flex:1;color:var(--danger);">Eliminar</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div v-if="!users.length && !loading" style="padding:2rem;text-align:center;color:var(--gray-500);">
+                        No hay usuarios registrados.
+                    </div>
+                    <div v-if="loading" style="padding:2rem;text-align:center;color:var(--gray-500);">
+                        Cargando usuarios...
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modal crear/editar usuario -->
+            <div v-if="showModal" class="modal-overlay" @click="closeModal">
+                <div class="modal" @click.stop>
+                    <h3>{{ isEdit ? 'Editar usuario' : 'Crear usuario' }}</h3>
+                    <form @submit.prevent="saveUser">
+                        <div class="form-group">
+                            <label>Nombre</label>
+                            <input v-model="form.nombre" required placeholder="Nombre completo" />
+                        </div>
+                        <div class="form-group">
+                            <label>Correo</label>
+                            <input v-model="form.correo" type="email" required placeholder="correo@ejemplo.com" />
+                        </div>
+                        <div class="form-group">
+                            <label>{{ isEdit ? 'Nueva contraseña (dejar vacío para no cambiar)' : 'Contraseña' }}</label>
+                            <input v-model="form.contraseña" :type="showPassword ? 'text' : 'password'" :required="!isEdit" placeholder="Mínimo 6 caracteres" minlength="6" />
+                            <button type="button" class="btn btn-outline-secondary btn-sm" style="margin-top:4px;" @click="showPassword = !showPassword">
+                                {{ showPassword ? 'Ocultar' : 'Mostrar' }}
+                            </button>
+                        </div>
+                        <div class="form-group">
+                            <label>Tipo de usuario</label>
+                            <select v-model="form.user_type" class="filter-select" style="width:100%;">
+                                <option :value="1">Administrador</option>
+                                <option :value="2">Usuario</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Estado</label>
+                            <select v-model="form.estado" class="filter-select" style="width:100%;">
+                                <option value="activo">Activo</option>
+                                <option value="inactivo">Inactivo</option>
+                                <option value="suspendido">Suspendido</option>
+                            </select>
+                        </div>
+                        <div class="modal-actions">
+                            <button type="button" class="btn btn-outline-secondary" @click="closeModal">Cancelar</button>
+                            <button type="submit" class="btn btn-primary">{{ isEdit ? 'Actualizar' : 'Crear' }}</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    `,
+    data() {
+        return {
+            user: null,
+            users: [],
+            loading: false,
+            showModal: false,
+            isEdit: false,
+            showPassword: false,
+            form: {
+                id: null,
+                nombre: '',
+                correo: '',
+                contraseña: '',
+                user_type: 2,
+                estado: 'activo',
+            },
+            showMainMenu: false,
+            darkMode: localStorage.getItem('darkMode') === 'true',
+            showUserMenu: false,
+        };
+    },
+    async mounted() {
+        this.applyDarkMode();
+        const userStr = localStorage.getItem('user');
+        if (userStr) {
+            this.user = JSON.parse(userStr);
+        }
+        await this.loadUsers();
+    },
+    methods: {
+        toggleDarkMode() { this.darkMode = !this.darkMode; localStorage.setItem('darkMode', this.darkMode); this.applyDarkMode(); },
+        applyDarkMode() { document.body.classList.toggle('dark-mode', this.darkMode); },
+        async loadUsers() {
+            try {
+                this.loading = true;
+                const response = await apiService.getAllUsers();
+                this.users = response.users || [];
+            } catch (error) {
+                console.error('Error al cargar usuarios:', error);
+                alert('Error al cargar usuarios');
+            } finally {
+                this.loading = false;
+            }
+        },
+        openAddModal() {
+            this.isEdit = false;
+            this.showPassword = false;
+            this.form = {
+                id: null,
+                nombre: '',
+                correo: '',
+                contraseña: '',
+                user_type: 2,
+                estado: 'activo',
+            };
+            this.showModal = true;
+        },
+        openEditModal(u) {
+            this.isEdit = true;
+            this.showPassword = false;
+            this.form = {
+                id: u.id,
+                nombre: u.nombre,
+                correo: u.correo,
+                contraseña: '',
+                user_type: u.user_type,
+                estado: u.estado,
+            };
+            this.showModal = true;
+        },
+        closeModal() {
+            this.showModal = false;
+        },
+        async saveUser() {
+            try {
+                if (this.isEdit) {
+                    const data = {
+                        nombre: this.form.nombre,
+                        correo: this.form.correo,
+                        user_type: this.form.user_type,
+                        estado: this.form.estado,
+                    };
+                    if (this.form.contraseña) {
+                        data.contraseña = this.form.contraseña;
+                    }
+                    await apiService.updateUserData(this.form.id, data);
+                    alert('Usuario actualizado exitosamente');
+                } else {
+                    if (!this.form.contraseña || this.form.contraseña.length < 6) {
+                        alert('La contraseña debe tener al menos 6 caracteres');
+                        return;
+                    }
+                    await apiService.createUser({
+                        nombre: this.form.nombre,
+                        correo: this.form.correo,
+                        contraseña: this.form.contraseña,
+                        user_type: this.form.user_type,
+                        estado: this.form.estado,
+                    });
+                    alert('Usuario creado exitosamente');
+                }
+                this.closeModal();
+                await this.loadUsers();
+            } catch (error) {
+                const msg = error.response?.data?.error || 'Error al guardar usuario';
+                alert(msg);
+            }
+        },
+        async deleteUserConfirm(u) {
+            if (!confirm('¿Estás seguro de eliminar al usuario "' + u.nombre + '"? Esta acción no se puede deshacer.')) return;
+            try {
+                await apiService.deleteUser(u.id);
+                alert('Usuario eliminado exitosamente');
+                await this.loadUsers();
+            } catch (error) {
+                const msg = error.response?.data?.error || 'Error al eliminar usuario';
+                alert(msg);
+            }
+        },
+        formatDate(dateStr) {
+            if (!dateStr) return '-';
+            const d = new Date(dateStr);
+            return d.toLocaleDateString('es-PY', { year: 'numeric', month: 'short', day: 'numeric' });
         },
         logout() {
             localStorage.removeItem('user');
@@ -2240,6 +2594,7 @@ const routes = [
     { path: '/login', component: Login },
     { path: '/dashboard', component: Dashboard, meta: { requiresAuth: true } },
     { path: '/mis-contactos', component: ContactList, meta: { requiresAuth: true } },
+    { path: '/usuarios', component: UserAdmin, meta: { requiresAuth: true, adminOnly: true } },
     { path: '/estados-usuario', component: UserStatusAdmin, meta: { requiresAuth: true, adminOnly: true } },
     { path: '/etiquetas', component: TagAdmin, meta: { requiresAuth: true, adminOnly: true } },
     { path: '/supervision', component: Supervision, meta: { requiresAuth: true, adminOnly: true } },

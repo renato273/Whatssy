@@ -1,4 +1,4 @@
-const { createUser, getUserByEmail, getUserById, updateUser, getUserStatusById } = require('../database/connection');
+const { createUser, getUserByEmail, getUserById, getAllUsers, updateUser, deleteUser, getUserStatusById } = require('../database/connection');
 const crypto = require('crypto');
 
 /**
@@ -344,9 +344,126 @@ async function updateUserStatusController(req, res) {
     }
 }
 
+// Listar todos los usuarios (solo admin)
+async function getAllUsersController(req, res) {
+    try {
+        const users = await getAllUsers();
+        // Remover contraseñas de la respuesta
+        const safeUsers = users.map(({ contraseña, ...u }) => u);
+        res.json({ users: safeUsers });
+    } catch (error) {
+        console.error('Error al obtener usuarios:', error);
+        res.status(500).json({ error: 'Error al obtener usuarios' });
+    }
+}
+
+// Actualizar datos de un usuario (solo admin)
+async function updateUserController(req, res) {
+    const { id } = req.params;
+    const userId = parseInt(id, 10);
+
+    if (isNaN(userId)) {
+        return res.status(400).json({ error: 'ID de usuario debe ser un número válido' });
+    }
+
+    const { nombre, correo, contraseña, estado, user_type } = req.body;
+
+    try {
+        const existingUser = await getUserById(userId);
+        if (!existingUser) {
+            return res.status(404).json({ error: 'Usuario no encontrado' });
+        }
+
+        // Validar correo si se envía
+        if (correo && correo !== existingUser.correo) {
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(correo)) {
+                return res.status(400).json({ error: 'El formato del correo electrónico no es válido' });
+            }
+            const emailExists = await getUserByEmail(correo);
+            if (emailExists) {
+                return res.status(409).json({ error: 'El correo ya está registrado por otro usuario' });
+            }
+        }
+
+        // Validar estado si se envía
+        if (estado) {
+            const estadosValidos = ['activo', 'inactivo', 'suspendido'];
+            if (!estadosValidos.includes(estado)) {
+                return res.status(400).json({ error: `El estado debe ser uno de: ${estadosValidos.join(', ')}` });
+            }
+        }
+
+        // Validar tipo de usuario si se envía
+        if (user_type !== undefined) {
+            const tiposValidos = [1, 2];
+            if (!tiposValidos.includes(user_type)) {
+                return res.status(400).json({ error: 'user_type debe ser 1 (admin) o 2 (user)' });
+            }
+        }
+
+        // Validar contraseña si se envía
+        if (contraseña && contraseña.length < 6) {
+            return res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres' });
+        }
+
+        const updateData = {};
+        if (nombre) updateData.nombre = nombre;
+        if (correo) updateData.correo = correo;
+        if (contraseña) updateData.contraseña = hashPassword(contraseña);
+        if (estado) updateData.estado = estado;
+        if (user_type !== undefined) updateData.userType = user_type;
+
+        const result = await updateUser(userId, updateData);
+
+        if (result.changes === 0) {
+            return res.status(400).json({ error: 'No se pudo actualizar el usuario' });
+        }
+
+        const updatedUser = await getUserById(userId);
+        const { contraseña: _, ...safeUser } = updatedUser;
+
+        res.json({ message: 'Usuario actualizado exitosamente', user: safeUser });
+    } catch (error) {
+        console.error('Error al actualizar usuario:', error);
+        res.status(500).json({ error: 'Error al actualizar el usuario' });
+    }
+}
+
+// Eliminar usuario (solo admin)
+async function deleteUserController(req, res) {
+    const { id } = req.params;
+    const userId = parseInt(id, 10);
+
+    if (isNaN(userId)) {
+        return res.status(400).json({ error: 'ID de usuario debe ser un número válido' });
+    }
+
+    try {
+        const existingUser = await getUserById(userId);
+        if (!existingUser) {
+            return res.status(404).json({ error: 'Usuario no encontrado' });
+        }
+
+        const result = await deleteUser(userId);
+
+        if (result.changes === 0) {
+            return res.status(400).json({ error: 'No se pudo eliminar el usuario' });
+        }
+
+        res.json({ message: 'Usuario eliminado exitosamente' });
+    } catch (error) {
+        console.error('Error al eliminar usuario:', error);
+        res.status(500).json({ error: 'Error al eliminar el usuario' });
+    }
+}
+
 module.exports = {
     createUser: createUserController,
     login: loginController,
     updateUserStatus: updateUserStatusController,
+    getAllUsers: getAllUsersController,
+    updateUser: updateUserController,
+    deleteUser: deleteUserController,
 };
 

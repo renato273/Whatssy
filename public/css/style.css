@@ -1364,6 +1364,26 @@ body {
     background: var(--gray-100);
     color: var(--gray-500);
 }
+.status-badge.status-activo {
+    background: var(--success-light);
+    color: var(--success-dark);
+}
+.status-badge.status-inactivo {
+    background: var(--gray-100);
+    color: var(--gray-500);
+}
+.status-badge.status-suspendido {
+    background: #fef3c7;
+    color: #92400e;
+}
+.role-badge.role-admin {
+    background: var(--primary-50);
+    color: var(--primary-dark);
+}
+.role-badge.role-user {
+    background: var(--gray-100);
+    color: var(--gray-600);
+}
 
 /* Code badges */
 .code-badge {
@@ -2796,6 +2816,26 @@ body {
     color: #34d399;
 }
 .dark-mode .status-badge.inactive {
+    background: var(--gray-700);
+    color: var(--gray-400);
+}
+.dark-mode .status-badge.status-activo {
+    background: rgba(16, 185, 129, 0.15);
+    color: #34d399;
+}
+.dark-mode .status-badge.status-inactivo {
+    background: var(--gray-700);
+    color: var(--gray-400);
+}
+.dark-mode .status-badge.status-suspendido {
+    background: rgba(245, 158, 11, 0.15);
+    color: #fbbf24;
+}
+.dark-mode .role-badge.role-admin {
+    background: rgba(99, 102, 241, 0.15);
+    color: var(--primary-light);
+}
+.dark-mode .role-badge.role-user {
     background: var(--gray-700);
     color: var(--gray-400);
 }
